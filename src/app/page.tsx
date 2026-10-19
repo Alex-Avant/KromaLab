@@ -1,69 +1,160 @@
-import Image from "next/image";
+import Link from "next/link";
+import type { Metadata } from "next";
+import { ArrowRightIcon, GaugeIcon, ZapIcon, ShieldCheckIcon } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { CmykBars } from "@/components/site/cmyk-bars";
+import { ScrambleText } from "@/components/home/scramble-text";
+import { RasterHero } from "@/components/home/raster-hero";
+import { ToolsIndex } from "@/components/home/tools-index";
+import { GuidesSection } from "@/components/home/guides-section";
+import { Reveal } from "@/components/motion/reveal";
+
+export const metadata: Metadata = {
+  title: "KromaLab — Laboratorio de precisión para impresión digital",
+  description:
+    "Instrumentos de trama, color y calibración para impresión DTF. Semitonos calibrados en tiempo real, 100% en tu navegador. Ninguna imagen sale de tu dispositivo.",
+};
+
+const principles = [
+  {
+    icon: ShieldCheckIcon,
+    tag: "PROCESO LOCAL",
+    title: "Tus imágenes no viajan",
+    text: "Todo el procesamiento ocurre en tu dispositivo, en un Web Worker. La imagen original nunca se sube a un servidor.",
+  },
+  {
+    icon: ZapIcon,
+    tag: "PREVIEW EN VIVO",
+    title: "Sin botón de aplicar",
+    text: "Cada ajuste de LPI, ángulo o curva se recalcula sobre la GPU en el mismo instante en que mueves el control.",
+  },
+  {
+    icon: GaugeIcon,
+    tag: "SALIDA DE PRODUCCIÓN",
+    title: "Listo para imprimir",
+    text: "Exportación en PNG con transparencia o TIFF 1-bit, dimensionada a 300 DPI con lectura del tamaño físico final.",
+  },
+];
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "KromaLab",
+  applicationCategory: "DesignApplication",
+  operatingSystem: "Web",
+  description:
+    "Laboratorio de precisión para impresión digital. Generador de semitonos DTF con procesamiento 100% local.",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+    description: "3 exportaciones diarias gratuitas. Plan Pro ilimitado.",
+  },
+  featureList: [
+    "Síntesis de semitonos DTF en tiempo real",
+    "Ajuste de LPI, ángulo y forma de punto",
+    "Exportación PNG con transparencia y TIFF 1-bit",
+    "Procesamiento 100% local sin subida de imágenes",
+  ],
+};
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+
+      {/* HERO */}
+      <section className="border-b border-border">
+        <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-6 py-14 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
+          <div>
+            <p className="flex items-center gap-2.5">
+              <span className="size-2 bg-primary" aria-hidden="true" />
+              <span className="tech-value text-[11px] tracking-[0.24em] text-muted-foreground">
+                LAB·01 — INSTRUMENTO DE TRAMA
+              </span>
+            </p>
+            <ScrambleText
+              as="h1"
+              text="Tramas de precisión para impresión digital."
+              className="mt-5 max-w-xl font-display text-[40px] leading-[1.04] font-semibold tracking-tight text-foreground sm:text-5xl lg:text-[56px]"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+              KromaLab es un laboratorio de instrumentos para diseño e impresión.
+              El primer módulo sintetiza semitonos DTF en tiempo real — LPI,
+              ángulo, forma de punto y canal de tinta blanca — directamente en tu
+              navegador. Ninguna imagen sale de tu dispositivo.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <Button asChild>
+                <Link href="/herramientas/semitonos-dtf">
+                  Abrir el editor
+                  <ArrowRightIcon aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/guias/semitonos-para-dtf">
+                  Leer la guía
+                </Link>
+              </Button>
+            </div>
+            <p className="mt-8 tech-value text-[10px] tracking-[0.22em] text-muted-foreground">
+              WEBGPU · WEBGL2 · OFFSCREENCANVAS · 4096 PX
+            </p>
+          </div>
+          <Reveal delay={0.1} y={16}>
+            <RasterHero />
+          </Reveal>
         </div>
-      </main>
-    </div>
+      </section>
+
+      {/* SEPARADOR CMYK */}
+      <div className="mx-auto w-full max-w-6xl px-6 py-6">
+        <CmykBars labels values={["100", "100", "100", "0"]} />
+      </div>
+
+      {/* PRINCIPIO DE OPERACIÓN */}
+      <section aria-label="Principio de operación" className="border-b border-border">
+        <div className="mx-auto grid w-full max-w-6xl gap-px border border-border bg-border sm:grid-cols-3">
+          {principles.map((p) => (
+            <Reveal key={p.tag} className="bg-background">
+              <div className="flex h-full flex-col gap-4 p-6">
+                <div className="flex items-center justify-between">
+                  <p.icon aria-hidden="true" className="size-4 text-primary" />
+                  <span className="tech-value text-[9px] tracking-[0.2em] text-muted-foreground">
+                    {p.tag}
+                  </span>
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-semibold text-foreground">
+                    {p.title}
+                  </h2>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {p.text}
+                  </p>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* INSTRUMENTOS */}
+      <section className="border-b border-border">
+        <div className="mx-auto w-full max-w-6xl px-6 py-16 lg:py-20">
+          <ToolsIndex />
+        </div>
+      </section>
+
+      {/* GUÍAS */}
+      <section className="border-b border-border">
+        <div className="mx-auto w-full max-w-6xl px-6 py-16 lg:py-20">
+          <GuidesSection />
+        </div>
+      </section>
+    </>
   );
 }

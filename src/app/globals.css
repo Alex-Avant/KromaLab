@@ -1,26 +1,121 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+/* ------------------------------------------------------------------ */
+/* KROMALAB DESIGN TOKENS                                              */
+/* Fondo #0B0D12 · Superficie #14171E · Borde #272D3A                 */
+/* Texto #F2F4F8 / #98A2B3 · Cyan #22D3EE (interactivo)               */
+/* Magenta #F43FA0 (estado activo) · Amarillo #FACC15 (warning/export)*/
+/* ------------------------------------------------------------------ */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0b0d12;
+  --surface: #14171e;
+  --surface-raised: #1a1e27;
+  --border: #272d3a;
+  --foreground: #f2f4f8;
+  --muted-foreground: #98a2b3;
+  --primary: #22d3ee;
+  --primary-foreground: #0b0d12;
+  --accent: #f43fa0;
+  --accent-foreground: #0b0d12;
+  --warning: #facc15;
+  --warning-foreground: #0b0d12;
+  --ring: #22d3ee;
+  --radius: 6px;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-ring: var(--ring);
+  --font-display: var(--font-clash);
+  --font-sans: var(--font-instrument);
+  --font-mono: var(--font-jetbrains);
+  --radius-xs: calc(var(--radius) - 3px);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: calc(var(--radius) - 1px);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    color: var(--foreground);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Trama de puntos — motivo de catálogo y superficies instrumentales */
+@utility dot-grid {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--muted-foreground) 28%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 8px 8px;
+}
+
+@utility dot-grid-cyan {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--primary) 55%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 8px 8px;
+}
+
+/* Texto técnico — valores numéricos y lecturas de instrumento */
+@utility tech-value {
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

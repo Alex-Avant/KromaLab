@@ -80,7 +80,10 @@ async function initEngine(incoming: ImageBitmap) {
   const { width, height } = previewSize(imageWidth, imageHeight);
   engine?.dispose();
   engine = null;
-  const created = await createBestRenderer(new OffscreenCanvas(width, height));
+  const created = await createBestRenderer(
+    new OffscreenCanvas(width, height),
+    (message) => post({ type: "error", message })
+  );
   // Otra carga pudo llegar mientras tanto: descartar esta instancia.
   if (bitmap !== incoming) {
     created.dispose();

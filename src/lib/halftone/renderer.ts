@@ -1,6 +1,13 @@
 /* ------------------------------------------------------------------ */
 /* Interfaz común de los renderizadores de trama y fábrica con         */
 /* detección automática: WebGPU (compute shader WGSL) → WebGL2.        */
+/*                                                                     */
+/* La creación de la GPU está acotada por timeout: en algunos drivers  */
+/* móviles requestAdapter/requestDevice pueden quedarse colgados sin   */
+/* resolver ni rechazar, dejando el preview en blanco para siempre.    */
+/* Si WebGPU no responde o falla la validación, se cae a WebGL2 sobre  */
+/* un lienzo limpio (el contexto WebGPU se configura solo después de   */
+/* validar los pipelines).                                             */
 /* ------------------------------------------------------------------ */
 
 import { HalftoneEngineCore, type RenderOptions } from "@/lib/halftone/engine-core";
@@ -20,29 +27,82 @@ export interface HalftoneRenderer {
   dispose(): void;
 }
 
+export type RendererErrorHandler = (message: string) => void;
+
+export type RendererOptions = {
+  /** Fuerza WebGL2 (reintento cuando WebGPU no responde). */
+  forceWebGL2?: boolean;
+};
+
+/** Tiempo máximo para obtener adaptador/dispositivo WebGPU. */
+const GPU_TIMEOUT_MS = 1800;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`${label}: sin respuesta en ${ms} ms.`)),
+      ms
+    );
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
+/** Renderizador WebGL2 (camino portable y de reserva). */
+export function createWebGL2Renderer(canvas: OffscreenCanvas): HalftoneRenderer {
+  return new HalftoneEngineCore(canvas);
+}
+
 /**
  * Elige el mejor renderizador disponible: WebGPU si el navegador lo
- * expone (con fallback silencioso ante adaptador/dispositivo nulos),
- * WebGL2 en caso contrario. Comparte un único protocolo.
+ * expone y la validación pasa (con timeout), WebGL2 en caso contrario.
  */
 export async function createBestRenderer(
-  canvas: OffscreenCanvas
+  canvas: OffscreenCanvas,
+  onError?: RendererErrorHandler,
+  opts: RendererOptions = {}
 ): Promise<HalftoneRenderer> {
-  if (typeof navigator !== "undefined" && "gpu" in navigator) {
+  if (
+    !opts.forceWebGL2 &&
+    typeof navigator !== "undefined" &&
+    "gpu" in navigator
+  ) {
+    let device: GPUDevice | null = null;
     try {
-      const adapter = await navigator.gpu.requestAdapter({
-        powerPreference: "high-performance",
-      });
+      const adapter = await withTimeout(
+        navigator.gpu.requestAdapter({ powerPreference: "high-performance" }),
+        GPU_TIMEOUT_MS,
+        "WebGPU (adaptador)"
+      );
       if (adapter) {
-        const device = await adapter.requestDevice();
+        device = await withTimeout(
+          adapter.requestDevice(),
+          GPU_TIMEOUT_MS,
+          "WebGPU (dispositivo)"
+        );
         const { WebGPURenderer } = await import(
           "@/lib/halftone/webgpu-renderer"
         );
-        return new WebGPURenderer(canvas, device);
+        return await WebGPURenderer.create(canvas, device, onError);
       }
-    } catch {
-      // Caer a WebGL2: la capa WebGPU es una mejora, no un requisito.
+    } catch (err) {
+      // Liberar el dispositivo si la validación falló y caer a WebGL2.
+      device?.destroy();
+      const reason = err instanceof Error ? err.message : String(err);
+      onError?.(`WebGPU no disponible (${reason}). Usando WebGL2.`);
     }
   }
-  return new HalftoneEngineCore(canvas);
+  return createWebGL2Renderer(canvas);
 }

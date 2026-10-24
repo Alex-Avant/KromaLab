@@ -83,7 +83,9 @@ export class HalftoneEngineCore implements HalftoneRenderer {
       alpha: true,
       antialias: false,
       premultipliedAlpha: false,
-      preserveDrawingBuffer: false,
+      // Necesario para que transferToImageBitmap capture el frame ya
+      // dibujado en todos los navegadores (el lienzo no se compone).
+      preserveDrawingBuffer: true,
       powerPreference: "high-performance",
     });
     if (!gl) throw new Error("WebGL2 no disponible en este contexto.");

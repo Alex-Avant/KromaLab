@@ -4,8 +4,10 @@ import * as React from "react";
 
 import { useEditorStore } from "@/store/editor-store";
 import { fileToBitmaps } from "@/lib/halftone/load-image";
+import { frameHasContent } from "@/lib/halftone/frame-check";
 import {
   createHalftoneClient,
+  InlineHalftoneClient,
   type HalftoneClientLike,
 } from "@/lib/halftone/worker-client";
 import type {
@@ -41,6 +43,12 @@ export function EditorShell() {
   const clientRef = React.useRef<HalftoneClientLike | null>(null);
   const previewRef = React.useRef<PreviewCanvasHandle>(null);
   const noticeTimer = React.useRef<number | undefined>(undefined);
+  const fileRef = React.useRef<File | null>(null);
+  const imageUrlRef = React.useRef<string | null>(null);
+  const frameCountRef = React.useRef(0);
+  const retriedRef = React.useRef(false);
+  const watchdogRef = React.useRef<number | undefined>(undefined);
+  const retryRef = React.useRef<(() => void) | null>(null);
 
   const settings = useEditorStore((s) => s.settings);
   const image = useEditorStore((s) => s.image);
@@ -53,7 +61,7 @@ export function EditorShell() {
   const resetViewport = useEditorStore((s) => s.resetViewport);
   const setSplit = useEditorStore((s) => s.setSplit);
   const setExportOpen = useEditorStore((s) => s.setExportOpen);
-  const [mobilePanel, setMobilePanel] = React.useState<MobilePanel>("controls");
+  const [mobilePanel, setMobilePanel] = React.useState<MobilePanel>(null);
 
   const showNotice = React.useCallback(
     (text: string) => {
@@ -64,55 +72,170 @@ export function EditorShell() {
     [setNotice]
   );
 
-  const ensureClient = React.useCallback((): HalftoneClientLike | null => {
-    if (clientRef.current) return clientRef.current;
+  const clearWatchdog = React.useCallback(() => {
+    window.clearTimeout(watchdogRef.current);
+    watchdogRef.current = undefined;
+  }, []);
+
+  /** Object URL del archivo (la vista ORIGINAL no depende de la GPU). */
+  const makeImageUrl = React.useCallback((file: File) => {
+    if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+    const url = URL.createObjectURL(file);
+    imageUrlRef.current = url;
+    return url;
+  }, []);
+
+  const createClient = React.useCallback(
+    (forceWebGL2: boolean): HalftoneClientLike | null => {
+      try {
+        const client = forceWebGL2
+          ? new InlineHalftoneClient({ forceWebGL2: true })
+          : createHalftoneClient();
+        client.onReady = (api) => {
+          if (clientRef.current !== client) return;
+          setStats({ ready: true, api });
+          // Reenvío defensivo: garantiza que el motor tenga ajustes aunque
+          // el mensaje inicial se haya cruzado con la inicialización.
+          client.update(useEditorStore.getState().settings);
+        };
+        client.onFrame = (frame) => {
+          if (clientRef.current !== client) {
+            frame.bitmap.close();
+            return;
+          }
+          // Primer frame transparente: el driver falló en silencio. Se
+          // conserva la muestra original visible y se reintenta en WebGL2.
+          if (frameCountRef.current === 0 && !frameHasContent(frame.bitmap)) {
+            frame.bitmap.close();
+            clearWatchdog();
+            if (!retriedRef.current) {
+              retriedRef.current = true;
+              retryRef.current?.();
+            } else {
+              setError(
+                "El motor de trama no produjo imagen (posible driver GPU). Se muestra la muestra original; prueba otra imagen o recarga la página."
+              );
+            }
+            return;
+          }
+          clearWatchdog();
+          frameCountRef.current += 1;
+          setStats({ renderMs: frame.renderMs, frames: frameCountRef.current });
+          previewRef.current?.drawFrame(frame);
+        };
+        client.onHistogram = (bins) => setHistogram(bins);
+        client.onError = (message) => {
+          if (clientRef.current !== client) return;
+          setError(message);
+        };
+        setStats({
+          engine: client.kind,
+          api: "none",
+          renderMs: 0,
+          frames: 0,
+          ready: false,
+        });
+        clientRef.current = client;
+        return client;
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "El motor de trama no arrancó."
+        );
+        return null;
+      }
+    },
+    [clearWatchdog, setStats, setHistogram, setError]
+  );
+
+  /**
+   * Reintento defensivo en el hilo principal con WebGL2 forzado: cubre
+   * navegadores donde WebGPU existe pero se queda colgado o produce
+   * frames vacíos sin lanzar error.
+   */
+  const retryWithWebGL2 = React.useCallback(async () => {
+    const file = fileRef.current;
+    if (!file) return;
+    clearWatchdog();
+    clientRef.current?.dispose();
+    clientRef.current = null;
     try {
-      const client = createHalftoneClient();
-      client.onReady = (api) => setStats({ ready: true, api });
-      client.onFrame = (frame) => {
-        setStats({ renderMs: frame.renderMs });
-        previewRef.current?.drawFrame(frame);
-      };
-      client.onHistogram = (bins) => setHistogram(bins);
-      client.onError = (message) => setError(message);
-      setStats({ engine: client.kind, api: "none", renderMs: 0 });
-      clientRef.current = client;
-      return client;
+      const loaded = await fileToBitmaps(file);
+      const client = createClient(true);
+      if (!client) {
+        loaded.bitmap.close();
+        return;
+      }
+      client.init(loaded.bitmap, loaded.width, loaded.height);
+      client.update(useEditorStore.getState().settings);
+      showNotice("El motor GPU no produjo imagen: reintentando en WebGL2.");
+      watchdogRef.current = window.setTimeout(() => {
+        if (frameCountRef.current === 0) {
+          setError(
+            "El motor de trama no emitió ningún frame. Prueba otra imagen o recarga la página."
+          );
+        }
+      }, 6000);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "El motor de trama no arrancó."
+        err instanceof Error
+          ? err.message
+          : "No se pudo reintentar el motor en WebGL2."
       );
-      return null;
     }
-  }, [setStats, setHistogram, setError]);
+  }, [clearWatchdog, createClient, setError, showNotice]);
+
+  React.useEffect(() => {
+    retryRef.current = () => void retryWithWebGL2();
+  }, [retryWithWebGL2]);
 
   const loadFiles = React.useCallback(
     async (files: File[]) => {
       const file = files[0];
       if (!file) return;
+      fileRef.current = file;
+      retriedRef.current = false;
+      frameCountRef.current = 0;
+      clearWatchdog();
       setError(null);
-      setStats({ ready: false, renderMs: 0 });
+      setStats({ ready: false, renderMs: 0, frames: 0 });
       try {
         const loaded = await fileToBitmaps(file);
-        const client = ensureClient();
-        if (!client) {
-          loaded.bitmap.close();
-          loaded.original.close();
-          return;
-        }
         setImage({
           name: loaded.name,
           width: loaded.width,
           height: loaded.height,
           resized: loaded.resized,
+          url: makeImageUrl(file),
         });
         resetViewport();
         setSplit({ enabled: false, fraction: 0.5 });
-        previewRef.current?.setOriginal(loaded.original);
+
+        clientRef.current?.dispose();
+        clientRef.current = null;
+        const client = createClient(false);
+        if (!client) {
+          loaded.bitmap.close();
+          return;
+        }
         client.init(loaded.bitmap, loaded.width, loaded.height);
         // Sin esto, el primer frame nunca se renderiza: los ajustes solo
         // se envían al motor cuando cambian.
         client.update(useEditorStore.getState().settings);
+
+        // Watchdog: si no llega ningún frame, reintentar una vez en el
+        // hilo principal forzando WebGL2.
+        watchdogRef.current = window.setTimeout(() => {
+          if (frameCountRef.current > 0) return;
+          if (retriedRef.current) {
+            setError(
+              "El motor de trama no emitió ningún frame. Prueba otra imagen o recarga la página."
+            );
+            return;
+          }
+          retriedRef.current = true;
+          void retryWithWebGL2();
+        }, 5000);
+
         if (loaded.resized) {
           showNotice(
             "Muestra fuera de límite: redimensionada a 4096 px (límite del laboratorio)."
@@ -126,7 +249,18 @@ export function EditorShell() {
         );
       }
     },
-    [ensureClient, setImage, setStats, setError, showNotice, resetViewport, setSplit]
+    [
+      clearWatchdog,
+      createClient,
+      makeImageUrl,
+      setImage,
+      setStats,
+      setError,
+      showNotice,
+      resetViewport,
+      setSplit,
+      retryWithWebGL2,
+    ]
   );
 
   // Pegado desde portapapeles (Ctrl+V / ⌘V).
@@ -172,8 +306,11 @@ export function EditorShell() {
   React.useEffect(() => {
     return () => {
       window.clearTimeout(noticeTimer.current);
+      window.clearTimeout(watchdogRef.current);
       clientRef.current?.dispose();
       clientRef.current = null;
+      if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+      imageUrlRef.current = null;
     };
   }, []);
 
@@ -195,23 +332,22 @@ export function EditorShell() {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
         <aside
           aria-label="Controles de calibración"
-          aria-hidden={mobilePanel !== "controls"}
           className={
             mobilePanel === "controls"
-              ? "w-full shrink-0 border-b border-border bg-surface/40 lg:max-h-none lg:w-72 lg:border-r lg:border-b-0"
+              ? "max-h-[32dvh] w-full shrink-0 overflow-y-auto border-b border-border bg-surface/40 lg:max-h-none lg:w-72 lg:border-r lg:border-b-0"
               : "hidden lg:block lg:w-72 lg:max-h-none lg:shrink-0 lg:border-r lg:border-b-0 lg:bg-surface/40"
           }
         >
           <ControlPanel />
         </aside>
 
-        <section className="flex min-h-[32rem] min-w-0 flex-1 flex-col lg:min-h-0">
+        <section className="flex min-w-0 flex-none flex-col lg:min-h-0 lg:flex-1">
           <ImageToolbar
             onReset={resetSettings}
             onFiles={(files) => void loadFiles(files)}
             onExport={() => setExportOpen(true)}
           />
-          <div className="dot-grid relative min-h-[24rem] flex-1 bg-background lg:min-h-0">
+          <div className="dot-grid relative h-[55dvh] min-h-[24rem] flex-none bg-background lg:h-auto lg:min-h-0 lg:flex-1">
             <PreviewCanvas
               ref={previewRef}
               onFiles={(files) => void loadFiles(files)}
@@ -236,10 +372,9 @@ export function EditorShell() {
 
         <aside
           aria-label="Fórmulas de trama"
-          aria-hidden={mobilePanel !== "presets"}
           className={
             mobilePanel === "presets"
-              ? "w-full shrink-0 border-t border-border bg-surface/40 lg:max-h-none lg:w-72 lg:border-t-0 lg:border-l"
+              ? "max-h-[32dvh] w-full shrink-0 overflow-y-auto border-t border-border bg-surface/40 lg:max-h-none lg:w-72 lg:border-t-0 lg:border-l"
               : "hidden lg:block lg:w-72 lg:max-h-none lg:shrink-0 lg:border-t-0 lg:border-l lg:bg-surface/40"
           }
         >

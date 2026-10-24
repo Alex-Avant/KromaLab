@@ -13,12 +13,15 @@ export type ImageMeta = {
   width: number;
   height: number;
   resized: boolean;
+  /** Object URL del archivo original (vista ORIGINAL y placeholder). */
+  url: string;
 };
 
 type EditorStats = {
   engine: "worker" | "inline" | "none";
   api: "webgpu" | "webgl2" | "none";
   renderMs: number;
+  frames: number;
   ready: boolean;
 };
 
@@ -66,7 +69,7 @@ type EditorState = {
 export const useEditorStore = create<EditorState>((set) => ({
   image: null,
   settings: DEFAULT_SETTINGS,
-  stats: { engine: "none", api: "none", renderMs: 0, ready: false },
+  stats: { engine: "none", api: "none", renderMs: 0, frames: 0, ready: false },
   histogram: null,
   notice: null,
   error: null,

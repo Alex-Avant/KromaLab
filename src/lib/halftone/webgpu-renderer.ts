@@ -8,9 +8,9 @@
 /* WebGL2 (engine-core.ts): el resto del sistema es agnóstico a la     */
 /* API de GPU.                                                         */
 /*                                                                     */
-/* Usado para el PREVIEW en vivo (camino crítico de 60 fps). La        */
-/* exportación a resolución completa mantiene el render por tiles      */
-/* WebGL2 (export-render.ts), más portable en GPUs antiguas.           */
+/* La construcción valida shaders y pipelines ANTES de configurar el   */
+/* contexto del lienzo: si algo falla, el canvas queda limpio y la     */
+/* fábrica puede caer a WebGL2 sobre el mismo OffscreenCanvas.         */
 /* ------------------------------------------------------------------ */
 
 /// <reference types="@webgpu/types" />
@@ -22,7 +22,10 @@ import {
   type HalftoneSettings,
 } from "@/lib/halftone/types";
 import type { RenderOptions } from "@/lib/halftone/engine-core";
-import type { HalftoneRenderer } from "@/lib/halftone/renderer";
+import type {
+  HalftoneRenderer,
+  RendererErrorHandler,
+} from "@/lib/halftone/renderer";
 
 const BG_COLORS: Record<string, [number, number, number, number]> = {
   transparent: [0, 0, 0, 0],
@@ -51,6 +54,17 @@ const OFFSETS = {
   bgAlpha: 76,
 } as const;
 
+type RendererParts = {
+  canvas: OffscreenCanvas;
+  device: GPUDevice;
+  context: GPUCanvasContext;
+  computePipeline: GPUComputePipeline;
+  presentPipeline: GPURenderPipeline;
+  uniformBuffer: GPUBuffer;
+  bindGroupLayout: GPUBindGroupLayout;
+  presentBindGroupLayout: GPUBindGroupLayout;
+};
+
 export class WebGPURenderer implements HalftoneRenderer {
   readonly kind = "webgpu" as const;
   readonly canvas: OffscreenCanvas;
@@ -61,30 +75,57 @@ export class WebGPURenderer implements HalftoneRenderer {
   private presentPipeline: GPURenderPipeline;
   private uniformBuffer: GPUBuffer;
   private bindGroupLayout: GPUBindGroupLayout;
+  private presentBindGroupLayout: GPUBindGroupLayout;
   private imageTexture: GPUTexture | null = null;
   private storageTexture: GPUTexture | null = null;
   private storageSize = { w: 0, h: 0 };
+  private disposed = false;
 
-  constructor(canvas: OffscreenCanvas, device: GPUDevice) {
-    this.canvas = canvas;
-    this.device = device;
+  private constructor(parts: RendererParts) {
+    this.canvas = parts.canvas;
+    this.device = parts.device;
+    this.context = parts.context;
+    this.computePipeline = parts.computePipeline;
+    this.presentPipeline = parts.presentPipeline;
+    this.uniformBuffer = parts.uniformBuffer;
+    this.bindGroupLayout = parts.bindGroupLayout;
+    this.presentBindGroupLayout = parts.presentBindGroupLayout;
+  }
 
-    const context = canvas.getContext("webgpu");
-    if (!context) throw new Error("Sin contexto WebGPU en el lienzo.");
-    this.context = context;
+  /**
+   * Crea y valida el renderizador. Lanza si los shaders o los pipelines
+   * no pasan la validación de WebGPU (para caer a WebGL2).
+   */
+  static async create(
+    canvas: OffscreenCanvas,
+    device: GPUDevice,
+    onError?: RendererErrorHandler
+  ): Promise<WebGPURenderer> {
     const format = navigator.gpu.getPreferredCanvasFormat();
-    context.configure({
-      device,
-      format,
-      alphaMode: "premultiplied",
-    });
 
     const computeModule = device.createShaderModule({
       label: "kromalab-halftone",
       code: HALFTONE_COMPUTE_WGSL,
     });
+    const presentModule = device.createShaderModule({
+      label: "kromalab-present",
+      code: PRESENT_VERTEX_WGSL + PRESENT_FRAGMENT_WGSL,
+    });
 
-    this.bindGroupLayout = device.createBindGroupLayout({
+    const [computeInfo, presentInfo] = await Promise.all([
+      computeModule.getCompilationInfo(),
+      presentModule.getCompilationInfo(),
+    ]);
+    const wgslError = [...computeInfo.messages, ...presentInfo.messages].find(
+      (message) => message.type === "error"
+    );
+    if (wgslError) {
+      throw new Error(
+        `WGSL línea ${wgslError.lineNum}: ${wgslError.message}`
+      );
+    }
+
+    const bindGroupLayout = device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: "float" } },
         { binding: 1, visibility: GPUShaderStage.COMPUTE, sampler: {} },
@@ -93,28 +134,24 @@ export class WebGPURenderer implements HalftoneRenderer {
       ],
     });
 
-    this.uniformBuffer = device.createBuffer({
-      size: UNIFORM_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-
-    this.computePipeline = device.createComputePipeline({
-      layout: device.createPipelineLayout({
-        bindGroupLayouts: [this.bindGroupLayout],
-      }),
-      compute: { module: computeModule, entryPoint: "halftone" },
-    });
-
-    const presentModule = device.createShaderModule({
-      label: "kromalab-present",
-      code: PRESENT_VERTEX_WGSL + PRESENT_FRAGMENT_WGSL,
-    });
     const presentBindGroupLayout = device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: "float" } },
       ],
     });
-    this.presentPipeline = device.createRenderPipeline({
+
+    device.pushErrorScope("validation");
+    const uniformBuffer = device.createBuffer({
+      size: UNIFORM_SIZE,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    const computePipeline = device.createComputePipeline({
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout],
+      }),
+      compute: { module: computeModule, entryPoint: "halftone" },
+    });
+    const presentPipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({
         bindGroupLayouts: [presentBindGroupLayout],
       }),
@@ -126,13 +163,49 @@ export class WebGPURenderer implements HalftoneRenderer {
       },
       primitive: { topology: "triangle-list" },
     });
+    const validationError = await device.popErrorScope();
+    if (validationError) {
+      uniformBuffer.destroy();
+      throw new Error(`Pipeline WebGPU: ${validationError.message}`);
+    }
 
-    // El bind group de presentación se crea por frame (la storage
-    // texture puede cambiar de tamaño entre previews).
-    this.presentBindGroupLayout = presentBindGroupLayout;
+    // Solo ahora se configura el lienzo: si algo falló, el canvas sigue
+    // libre para crear un contexto WebGL2 de reserva.
+    const context = canvas.getContext("webgpu");
+    if (!context) throw new Error("Sin contexto WebGPU en el lienzo.");
+    context.configure({
+      device,
+      format,
+      alphaMode: "premultiplied",
+    });
+
+    const renderer = new WebGPURenderer({
+      canvas,
+      device,
+      context,
+      computePipeline,
+      presentPipeline,
+      uniformBuffer,
+      bindGroupLayout,
+      presentBindGroupLayout,
+    });
+    renderer.watchErrors(onError);
+    return renderer;
   }
 
-  private presentBindGroupLayout: GPUBindGroupLayout;
+  /** Errores de validación no capturados y pérdida del dispositivo. */
+  private watchErrors(onError?: RendererErrorHandler) {
+    if (!onError) return;
+    this.device.addEventListener("uncapturederror", (event) => {
+      if (this.disposed) return;
+      const detail = event as GPUUncapturedErrorEvent;
+      onError(`WebGPU: ${detail.error.message}`);
+    });
+    void this.device.lost.then((info) => {
+      if (this.disposed || info.reason === "destroyed") return;
+      onError(`WebGPU: dispositivo perdido (${info.reason}).`);
+    });
+  }
 
   setBitmap(bitmap: ImageBitmap) {
     const device = this.device;
@@ -258,6 +331,7 @@ export class WebGPURenderer implements HalftoneRenderer {
   }
 
   dispose() {
+    this.disposed = true;
     this.imageTexture?.destroy();
     this.storageTexture?.destroy();
     this.uniformBuffer.destroy();

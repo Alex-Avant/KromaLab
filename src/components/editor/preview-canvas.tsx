@@ -6,11 +6,12 @@ import { AlertTriangleIcon } from "lucide-react";
 import { useEditorStore } from "@/store/editor-store";
 import { ImageDropzone } from "@/components/editor/image-dropzone";
 import { ViewportControls } from "@/components/editor/viewport-controls";
+import { previewSize } from "@/lib/halftone/types";
+import { PreviewFrameBuffer } from "@/lib/halftone/frame-buffer";
 import type { FramePayload } from "@/lib/halftone/worker-client";
 
 export type PreviewCanvasHandle = {
   drawFrame: (frame: FramePayload) => void;
-  setOriginal: (bitmap: ImageBitmap) => void;
 };
 
 type PreviewCanvasProps = {
@@ -42,13 +43,13 @@ export const PreviewCanvas = React.forwardRef<
 >(function PreviewCanvas({ onFiles }, ref) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const tramaCanvasRef = React.useRef<HTMLCanvasElement>(null);
-  const originalCanvasRef = React.useRef<HTMLCanvasElement>(null);
   const loupeCanvasRef = React.useRef<HTMLCanvasElement>(null);
+  const [frameBuffer] = React.useState(() => new PreviewFrameBuffer());
 
-  const tramaBitmapRef = React.useRef<ImageBitmap | null>(null);
-  const originalBitmapRef = React.useRef<ImageBitmap | null>(null);
+  const hasFrameRef = React.useRef(false);
   const fitScaleRef = React.useRef(1);
   const [box, setBox] = React.useState({ w: 0, h: 0 });
+  const [hasFrame, setHasFrame] = React.useState(false);
   const loupeStateRef = React.useRef<{ x: number; y: number } | null>(null);
 
   const altRef = React.useRef(false);
@@ -115,59 +116,54 @@ export const PreviewCanvas = React.forwardRef<
     if (loupe) redrawLoupe();
   }, [loupe, redrawLoupe]);
 
-  React.useImperativeHandle(ref, () => ({
-    drawFrame({ bitmap }: FramePayload) {
+  const drawFrame = React.useCallback(
+    ({ bitmap }: FramePayload) => {
       const canvas = tramaCanvasRef.current;
       if (!canvas) {
-        bitmap.close();
+        // El lienzo aún no está montado: conservar el frame más reciente
+        // (cerrando el pendiente anterior) y pintarlo al montar.
+        frameBuffer.enqueue(bitmap);
         return;
       }
       canvas.width = bitmap.width;
       canvas.height = bitmap.height;
       canvas.getContext("2d")?.drawImage(bitmap, 0, 0);
-      tramaBitmapRef.current?.close();
-      tramaBitmapRef.current = bitmap;
+      frameBuffer.commit(bitmap);
+      hasFrameRef.current = true;
+      setHasFrame(true);
       setDims({ w: bitmap.width, h: bitmap.height });
-      if (originalBitmapRef.current) {
-        const oc = originalCanvasRef.current;
-        if (oc) {
-          oc.width = bitmap.width;
-          oc.height = bitmap.height;
-          oc.getContext("2d")?.drawImage(
-            originalBitmapRef.current,
-            0,
-            0,
-            bitmap.width,
-            bitmap.height
-          );
-        }
-      }
       if (loupeStateRef.current) {
         // Siguiente frame: la lupa se redibuja en el efecto del estado dims.
         setLoupe((prev) => (prev ? { ...prev } : prev));
       }
     },
-    setOriginal(bitmap: ImageBitmap) {
-      originalBitmapRef.current?.close();
-      originalBitmapRef.current = bitmap;
-      const oc = originalCanvasRef.current;
-      if (oc && dims.w && dims.h) {
-        oc.width = dims.w;
-        oc.height = dims.h;
-        oc.getContext("2d")?.drawImage(bitmap, 0, 0, dims.w, dims.h);
-      }
-    },
-  }));
+    [frameBuffer]
+  );
 
-  // Limpieza de bitmaps
+  React.useImperativeHandle(ref, () => ({ drawFrame }), [drawFrame]);
+
+  // La vista ORIGINAL y el placeholder usan el archivo vía object URL:
+  // no dependen de GPU ni de canvas, así que la muestra siempre se ve.
   React.useEffect(() => {
-    return () => {
-      tramaBitmapRef.current?.close();
-      originalBitmapRef.current?.close();
-      tramaBitmapRef.current = null;
-      originalBitmapRef.current = null;
-    };
-  }, []);
+    if (!image) return;
+    hasFrameRef.current = false;
+    setHasFrame(false);
+    const preview = previewSize(image.width, image.height);
+    setDims({ w: preview.width, h: preview.height });
+  }, [image]);
+
+  // Si llegó un frame antes de que el lienzo estuviera montado, se pinta
+  // en cuanto la imagen entra en el árbol.
+  React.useEffect(() => {
+    if (!image) return;
+    const pending = frameBuffer.takePending();
+    if (pending) drawFrame({ bitmap: pending, renderMs: 0 });
+  }, [image, drawFrame, frameBuffer]);
+
+  // Limpieza de bitmaps (pendiente y actual, una sola vez).
+  React.useEffect(() => {
+    return () => frameBuffer.dispose();
+  }, [frameBuffer]);
 
   // Observación del contenedor (escala de ajuste).
   React.useEffect(() => {
@@ -325,7 +321,7 @@ export const PreviewCanvas = React.forwardRef<
     <div
       ref={containerRef}
       className={
-        "relative h-full w-full overflow-hidden " +
+        "absolute inset-0 overflow-hidden " +
         (loupe ? "cursor-none" : spaceRef.current && image ? "cursor-grab" : "")
       }
       onPointerDown={onPointerDown}
@@ -347,7 +343,13 @@ export const PreviewCanvas = React.forwardRef<
               className="absolute top-1/2 left-1/2 will-change-transform"
               style={layerStyle}
             >
-              <canvas ref={originalCanvasRef} className="h-full w-full" />
+              {/* eslint-disable-next-line @next/next/no-img-element -- object URL local, no optimizable */}
+              <img
+                src={image.url}
+                alt=""
+                draggable={false}
+                className="h-full w-full select-none"
+              />
             </div>
           </div>
 
@@ -364,10 +366,21 @@ export const PreviewCanvas = React.forwardRef<
               className="absolute top-1/2 left-1/2 will-change-transform"
               style={layerStyle}
             >
+              {/* Placeholder sin GPU: la muestra se ve antes del primer
+                  frame y permanece si el motor no produce imagen. */}
+              {!hasFrame && (
+                // eslint-disable-next-line @next/next/no-img-element -- placeholder local sin GPU
+                <img
+                  src={image.url}
+                  alt=""
+                  draggable={false}
+                  className="absolute inset-0 h-full w-full select-none"
+                />
+              )}
               <canvas
                 ref={tramaCanvasRef}
                 aria-label="Preview de la trama de semitonos"
-                className="h-full w-full"
+                className="relative h-full w-full"
               />
             </div>
           </div>
@@ -444,6 +457,12 @@ export const PreviewCanvas = React.forwardRef<
                 ⌖ LUPA
               </span>
             </div>
+          )}
+
+          {!hasFrame && !error && (
+            <span className="tech-value absolute top-3 left-3 z-20 rounded-xs border border-border bg-background/85 px-2 py-1 text-[10px] tracking-[0.16em] text-primary">
+              CALIBRANDO TRAMA…
+            </span>
           )}
 
           <ViewportControls />

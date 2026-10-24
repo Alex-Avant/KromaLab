@@ -63,6 +63,12 @@ export class HalftoneClient implements HalftoneClientLike {
     );
     this.worker.onmessage = (e: MessageEvent<MainMessage>) => {
       const msg = e.data;
+      // Un cliente desechado no debe entregar frames (evita que una carga
+      // anterior reemplace el preview vigente). El bitmap se libera aquí.
+      if (this.disposed) {
+        if (msg.type === "frame") msg.bitmap.close();
+        return;
+      }
       switch (msg.type) {
         case "ready":
           this.onReady?.(msg.api);
@@ -102,6 +108,10 @@ export class HalftoneClient implements HalftoneClientLike {
   }
 
   init(bitmap: ImageBitmap, imageWidth: number, imageHeight: number) {
+    if (this.disposed) {
+      bitmap.close();
+      return;
+    }
     this.worker.postMessage(
       { type: "init", bitmap, imageWidth, imageHeight },
       [bitmap]
@@ -148,6 +158,11 @@ export class InlineHalftoneClient implements HalftoneClientLike {
   private raf = 0;
   private disposed = false;
   private renderSeq = 0;
+  private readonly forceWebGL2: boolean;
+
+  constructor(opts: { forceWebGL2?: boolean } = {}) {
+    this.forceWebGL2 = opts.forceWebGL2 ?? false;
+  }
 
   onReady: ((api: GpuApi) => void) | null = null;
   onFrame: ((frame: FramePayload) => void) | null = null;
@@ -155,6 +170,10 @@ export class InlineHalftoneClient implements HalftoneClientLike {
   onError: ((message: string) => void) | null = null;
 
   init(bitmap: ImageBitmap, imageWidth: number, imageHeight: number) {
+    if (this.disposed) {
+      bitmap.close();
+      return;
+    }
     this.bitmap?.close();
     this.bitmap = bitmap;
     this.imageWidth = imageWidth;
@@ -164,7 +183,9 @@ export class InlineHalftoneClient implements HalftoneClientLike {
         const { width, height } = previewSize(imageWidth, imageHeight);
         this.engine?.dispose();
         const engine = await createBestRenderer(
-          new OffscreenCanvas(width, height)
+          new OffscreenCanvas(width, height),
+          (message) => this.onError?.(message),
+          { forceWebGL2: this.forceWebGL2 }
         );
         if (this.disposed) {
           engine.dispose();
@@ -182,6 +203,7 @@ export class InlineHalftoneClient implements HalftoneClientLike {
   }
 
   update(settings: HalftoneSettings) {
+    if (this.disposed) return;
     this.settings = settings;
     if (this.raf || this.disposed) return;
     this.raf = requestAnimationFrame(() => {
@@ -219,7 +241,7 @@ export class InlineHalftoneClient implements HalftoneClientLike {
       width,
       height
     );
-    if (seq !== this.renderSeq || !this.engine) return;
+    if (seq !== this.renderSeq || !this.engine || this.disposed) return;
     const out = this.engine.canvas.transferToImageBitmap();
     this.onFrame?.({ bitmap: out, renderMs });
   }

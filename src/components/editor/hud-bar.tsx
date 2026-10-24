@@ -79,6 +79,18 @@ export function HudBar() {
           {stats.renderMs > 0 ? `${stats.renderMs.toFixed(1)} MS` : "—"}
         </span>
       </span>
+      <span className="tech-value text-[10px] tracking-[0.14em] text-muted-foreground">
+        FRAMES:{" "}
+        <span
+          className={
+            stats.ready && stats.frames === 0
+              ? "text-warning"
+              : "text-foreground"
+          }
+        >
+          {stats.ready && stats.frames === 0 ? "SIN FRAMES" : stats.frames}
+        </span>
+      </span>
       <div className="ml-auto w-40">
         <CmykBars />
       </div>

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 type ControlGroupProps = {
   label: string;
   value?: React.ReactNode;
+  hint?: string;
   children: React.ReactNode;
   className?: string;
 };
@@ -12,6 +13,7 @@ type ControlGroupProps = {
 export function ControlGroup({
   label,
   value,
+  hint,
   children,
   className,
 }: ControlGroupProps) {
@@ -25,6 +27,11 @@ export function ControlGroup({
           <span className="tech-value text-xs text-foreground">{value}</span>
         )}
       </div>
+      {hint && (
+        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+          {hint}
+        </p>
+      )}
       <div className="mt-3">{children}</div>
     </div>
   );

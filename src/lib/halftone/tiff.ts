@@ -49,7 +49,8 @@ function packBitsRow(row: Uint8Array): Uint8Array {
 /**
  * Codifica una imagen 1-bit a TIFF (endianness little, PackBits).
  * @param packedRows bytes empaquetados: fila `r` ocupa
- *        [r*stride, (r+1)*stride); bit 0 de cada byte = primer píxel.
+ *        [r*stride, (r+1)*stride); el bit más significativo es el primer
+ *        píxel de la fila (convención TIFF) y 1 significa tinta.
  * @param width  ancho en píxeles
  * @param height alto en píxeles
  */
@@ -116,7 +117,8 @@ export function encodeTiff1Bit(
   entry(262, 3, 1, 0); // PhotometricInterpretation = WhiteIsZero
   entry(273, 4, height, offsetsArrayPos); // StripOffsets (array)
   entry(277, 3, 1, 1); // SamplesPerPixel
-  entry(278, 4, 1, height); // RowsPerStrip
+  // Cada tira contiene UNA fila; debe coincidir con el número de tiras.
+  entry(278, 4, 1, 1); // RowsPerStrip
   entry(279, 4, height, countsArrayPos); // StripByteCounts (array)
   entry(282, 5, 1, rationalsPos); // XResolution (RATIONAL)
   entry(283, 5, 1, rationalsPos + 8); // YResolution

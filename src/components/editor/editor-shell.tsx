@@ -15,6 +15,7 @@ import type {
   ExportScale,
   HalftoneSettings,
 } from "@/lib/halftone/types";
+import type { ExportResult } from "@/lib/halftone/export-render";
 import { ControlPanel } from "@/components/editor/control-panel";
 import { PresetsPanel } from "@/components/editor/presets-panel";
 import { ImageToolbar } from "@/components/editor/image-toolbar";
@@ -41,6 +42,9 @@ type MobilePanel = "controls" | "presets" | null;
 
 export function EditorShell() {
   const clientRef = React.useRef<HalftoneClientLike | null>(null);
+  // Cliente retenido para exportar aunque el preview cambie de motor
+  // (p. ej. reintento WebGL2): evita crear/destruir contextos GPU.
+  const exportClientRef = React.useRef<HalftoneClientLike | null>(null);
   const previewRef = React.useRef<PreviewCanvasHandle>(null);
   const noticeTimer = React.useRef<number | undefined>(undefined);
   const fileRef = React.useRef<File | null>(null);
@@ -49,6 +53,11 @@ export function EditorShell() {
   const retriedRef = React.useRef(false);
   const watchdogRef = React.useRef<number | undefined>(undefined);
   const retryRef = React.useRef<(() => void) | null>(null);
+  const exportingRef = React.useRef(false);
+  // Modo diagnóstico de exportación: ?noRetry=1 desactiva los reintentos
+  // automáticos del preview (útil para aislar la GPU en pruebas).
+  const noRetryRef = React.useRef(false);
+  const exportOnlyRef = React.useRef(false);
 
   const settings = useEditorStore((s) => s.settings);
   const image = useEditorStore((s) => s.image);
@@ -71,6 +80,13 @@ export function EditorShell() {
     },
     [setNotice]
   );
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    noRetryRef.current = params.has("noRetry");
+    exportOnlyRef.current = params.get("exportOnly") === "1";
+  }, []);
 
   const clearWatchdog = React.useCallback(() => {
     window.clearTimeout(watchdogRef.current);
@@ -108,6 +124,9 @@ export function EditorShell() {
           if (frameCountRef.current === 0 && !frameHasContent(frame.bitmap)) {
             frame.bitmap.close();
             clearWatchdog();
+            // Nunca interrumpir una exportación en curso: al terminar se
+            // reanuda la recuperación del preview si sigue sin imagen.
+            if (exportingRef.current || noRetryRef.current) return;
             if (!retriedRef.current) {
               retriedRef.current = true;
               retryRef.current?.();
@@ -136,6 +155,7 @@ export function EditorShell() {
           ready: false,
         });
         clientRef.current = client;
+        if (!exportClientRef.current) exportClientRef.current = client;
         return client;
       } catch (err) {
         setError(
@@ -156,7 +176,12 @@ export function EditorShell() {
     const file = fileRef.current;
     if (!file) return;
     clearWatchdog();
-    clientRef.current?.dispose();
+    // No destruir el cliente retenido para exportar: conserva la muestra
+    // y su contexto GPU (crear otro después de perderlo falla en algunas
+    // implementaciones). Solo se libera al cargar otra imagen.
+    if (clientRef.current && clientRef.current !== exportClientRef.current) {
+      clientRef.current.dispose();
+    }
     clientRef.current = null;
     try {
       const loaded = await fileToBitmaps(file);
@@ -188,6 +213,42 @@ export function EditorShell() {
     retryRef.current = () => void retryWithWebGL2();
   }, [retryWithWebGL2]);
 
+  const removeImage = React.useCallback(() => {
+    clearWatchdog();
+    if (clientRef.current && clientRef.current !== exportClientRef.current) {
+      clientRef.current.dispose();
+    }
+    exportClientRef.current?.dispose();
+    exportClientRef.current = null;
+    clientRef.current = null;
+    previewRef.current?.resetFrames();
+    frameCountRef.current = 0;
+    retriedRef.current = false;
+    fileRef.current = null;
+    if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
+    imageUrlRef.current = null;
+    setImage(null);
+    setError(null);
+    setNotice(null);
+    resetViewport();
+    setSplit({ enabled: false, fraction: 0.5 });
+    setStats({
+      engine: "none",
+      api: "none",
+      renderMs: 0,
+      frames: 0,
+      ready: false,
+    });
+  }, [
+    clearWatchdog,
+    setImage,
+    setError,
+    setNotice,
+    resetViewport,
+    setSplit,
+    setStats,
+  ]);
+
   const loadFiles = React.useCallback(
     async (files: File[]) => {
       const file = files[0];
@@ -200,6 +261,8 @@ export function EditorShell() {
       setStats({ ready: false, renderMs: 0, frames: 0 });
       try {
         const loaded = await fileToBitmaps(file);
+        // Evita que un frame de la muestra anterior se pinte sobre la nueva.
+        previewRef.current?.resetFrames();
         setImage({
           name: loaded.name,
           width: loaded.width,
@@ -210,14 +273,19 @@ export function EditorShell() {
         resetViewport();
         setSplit({ enabled: false, fraction: 0.5 });
 
-        clientRef.current?.dispose();
+        if (exportClientRef.current) {
+          exportClientRef.current.dispose();
+          exportClientRef.current = null;
+        }
         clientRef.current = null;
         const client = createClient(false);
         if (!client) {
           loaded.bitmap.close();
           return;
         }
-        client.init(loaded.bitmap, loaded.width, loaded.height);
+        client.init(loaded.bitmap, loaded.width, loaded.height, {
+          preview: !exportOnlyRef.current,
+        });
         // Sin esto, el primer frame nunca se renderiza: los ajustes solo
         // se envían al motor cuando cambian.
         client.update(useEditorStore.getState().settings);
@@ -226,6 +294,17 @@ export function EditorShell() {
         // hilo principal forzando WebGL2.
         watchdogRef.current = window.setTimeout(() => {
           if (frameCountRef.current > 0) return;
+          if (noRetryRef.current) return;
+          if (exportingRef.current) {
+            // Reintentar la comprobación cuando acabe la exportación,
+            // sin lanzar un segundo reintento.
+            watchdogRef.current = window.setTimeout(() => {
+              if (frameCountRef.current > 0 || retriedRef.current) return;
+              retriedRef.current = true;
+              retryRef.current?.();
+            }, 2000);
+            return;
+          }
           if (retriedRef.current) {
             setError(
               "El motor de trama no emitió ningún frame. Prueba otra imagen o recarga la página."
@@ -307,7 +386,11 @@ export function EditorShell() {
     return () => {
       window.clearTimeout(noticeTimer.current);
       window.clearTimeout(watchdogRef.current);
-      clientRef.current?.dispose();
+      if (clientRef.current && clientRef.current !== exportClientRef.current) {
+        clientRef.current.dispose();
+      }
+      exportClientRef.current?.dispose();
+      exportClientRef.current = null;
       clientRef.current = null;
       if (imageUrlRef.current) URL.revokeObjectURL(imageUrlRef.current);
       imageUrlRef.current = null;
@@ -319,10 +402,29 @@ export function EditorShell() {
       s: HalftoneSettings,
       format: ExportFormat,
       scale: ExportScale
-    ): Promise<{ buffer: ArrayBuffer; width: number; height: number; mime: string }> => {
-      const client = clientRef.current;
+    ): Promise<ExportResult> => {
+      const client = exportClientRef.current ?? clientRef.current;
       if (!client) throw new Error("El motor no está activo.");
-      return client.export(s, format, scale);
+      exportingRef.current = true;
+      try {
+        return await client.export(s, format, scale);
+      } finally {
+        exportingRef.current = false;
+        // Si el preview seguía sin frames, reintentar la recuperación más
+        // tarde (no inmediatamente: evita destruir el motor entre exports).
+        if (
+          frameCountRef.current === 0 &&
+          !retriedRef.current &&
+          !noRetryRef.current
+        ) {
+          window.clearTimeout(watchdogRef.current);
+          watchdogRef.current = window.setTimeout(() => {
+            if (frameCountRef.current > 0 || retriedRef.current) return;
+            retriedRef.current = true;
+            retryRef.current?.();
+          }, 5000);
+        }
+      }
     },
     []
   );
@@ -345,6 +447,7 @@ export function EditorShell() {
           <ImageToolbar
             onReset={resetSettings}
             onFiles={(files) => void loadFiles(files)}
+            onRemove={removeImage}
             onExport={() => setExportOpen(true)}
           />
           <div className="dot-grid relative h-[55dvh] min-h-[24rem] flex-none bg-background lg:h-auto lg:min-h-0 lg:flex-1">

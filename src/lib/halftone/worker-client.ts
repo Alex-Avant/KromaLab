@@ -26,7 +26,12 @@ export type GpuApi = "webgpu" | "webgl2";
 
 export interface HalftoneClientLike {
   readonly kind: "worker" | "inline";
-  init(bitmap: ImageBitmap, imageWidth: number, imageHeight: number): void;
+  init(
+    bitmap: ImageBitmap,
+    imageWidth: number,
+    imageHeight: number,
+    options?: { preview?: boolean }
+  ): void;
   update(settings: HalftoneSettings): void;
   export(
     settings: HalftoneSettings,
@@ -50,6 +55,7 @@ export class HalftoneClient implements HalftoneClientLike {
     | ((result: ExportResult) => void)
     | null = null;
   private exportReject: ((err: Error) => void) | null = null;
+  private exportTimer: ReturnType<typeof setTimeout> | null = null;
 
   onReady: ((api: GpuApi) => void) | null = null;
   onFrame: ((frame: FramePayload) => void) | null = null;
@@ -85,16 +91,14 @@ export class HalftoneClient implements HalftoneClientLike {
             width: msg.width,
             height: msg.height,
             mime: msg.mime,
+            diagnostics: msg.diagnostics,
           };
           this.exportResolve?.(result);
-          this.exportResolve = null;
-          this.exportReject = null;
+          this.clearExport();
           break;
         }
         case "export-error": {
-          this.exportReject?.(new Error(msg.message));
-          this.exportResolve = null;
-          this.exportReject = null;
+          this.failExport(msg.message);
           break;
         }
         case "error":
@@ -103,17 +107,46 @@ export class HalftoneClient implements HalftoneClientLike {
       }
     };
     this.worker.onerror = (e) => {
-      this.onError?.(e.message || "Error desconocido en el worker.");
+      const message = e.message || "Error desconocido en el worker.";
+      // No dejar una exportación colgada si el worker muere.
+      this.failExport(message);
+      this.onError?.(message);
     };
   }
 
-  init(bitmap: ImageBitmap, imageWidth: number, imageHeight: number) {
+  private clearExport() {
+    if (this.exportTimer) {
+      clearTimeout(this.exportTimer);
+      this.exportTimer = null;
+    }
+    this.exportResolve = null;
+    this.exportReject = null;
+  }
+
+  private failExport(message: string) {
+    const reject = this.exportReject;
+    this.clearExport();
+    reject?.(new Error(message));
+  }
+
+  init(
+    bitmap: ImageBitmap,
+    imageWidth: number,
+    imageHeight: number,
+    options: { preview?: boolean } = {}
+  ) {
     if (this.disposed) {
       bitmap.close();
       return;
     }
     this.worker.postMessage(
-      { type: "init", bitmap, imageWidth, imageHeight },
+      {
+        type: "init",
+        bitmap,
+        imageWidth,
+        imageHeight,
+        preview: options.preview !== false,
+      },
       [bitmap]
     );
   }
@@ -133,9 +166,16 @@ export class HalftoneClient implements HalftoneClientLike {
     format: ExportFormat,
     scale: ExportScale
   ): Promise<ExportResult> {
+    // Una exportación nueva cancela la anterior pendiente.
+    this.failExport("Exportación reemplazada por una nueva solicitud.");
     return new Promise((resolve, reject) => {
       this.exportResolve = resolve;
       this.exportReject = reject;
+      this.exportTimer = setTimeout(() => {
+        this.failExport(
+          "La exportación no respondió en 60 s (posible bloqueo de la GPU)."
+        );
+      }, 60_000);
       this.worker.postMessage({ type: "export", format, scale, settings });
     });
   }
@@ -143,6 +183,7 @@ export class HalftoneClient implements HalftoneClientLike {
   dispose() {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
+    this.failExport("Exportación cancelada: motor cerrado.");
     this.worker.postMessage({ type: "dispose" });
     this.worker.terminate();
   }
@@ -169,7 +210,12 @@ export class InlineHalftoneClient implements HalftoneClientLike {
   onHistogram: ((bins: Uint32Array) => void) | null = null;
   onError: ((message: string) => void) | null = null;
 
-  init(bitmap: ImageBitmap, imageWidth: number, imageHeight: number) {
+  init(
+    bitmap: ImageBitmap,
+    imageWidth: number,
+    imageHeight: number,
+    options: { preview?: boolean } = {}
+  ) {
     if (this.disposed) {
       bitmap.close();
       return;
@@ -178,6 +224,7 @@ export class InlineHalftoneClient implements HalftoneClientLike {
     this.bitmap = bitmap;
     this.imageWidth = imageWidth;
     this.imageHeight = imageHeight;
+    if (options.preview === false) return;
     void (async () => {
       try {
         const { width, height } = previewSize(imageWidth, imageHeight);
@@ -221,7 +268,7 @@ export class InlineHalftoneClient implements HalftoneClientLike {
     if (!this.bitmap) {
       return Promise.reject(new Error("No hay muestra cargada."));
     }
-    return renderExport(
+    const task = renderExport(
       this.bitmap,
       this.imageWidth,
       this.imageHeight,
@@ -229,21 +276,49 @@ export class InlineHalftoneClient implements HalftoneClientLike {
       format,
       scale
     );
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () =>
+          reject(
+            new Error(
+              "La exportación no respondió en 60 s (posible bloqueo de la GPU)."
+            )
+          ),
+        60_000
+      );
+      task.then(
+        (result) => {
+          clearTimeout(timer);
+          resolve(result);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(error);
+        }
+      );
+    });
   }
 
   private async render() {
     if (!this.engine || !this.settings) return;
     const seq = ++this.renderSeq;
-    const { width, height } = previewSize(this.imageWidth, this.imageHeight);
-    const renderMs = await this.engine.render(
-      this.settings,
-      this.imageWidth,
-      width,
-      height
-    );
-    if (seq !== this.renderSeq || !this.engine || this.disposed) return;
-    const out = this.engine.canvas.transferToImageBitmap();
-    this.onFrame?.({ bitmap: out, renderMs });
+    try {
+      const { width, height } = previewSize(this.imageWidth, this.imageHeight);
+      const renderMs = await this.engine.render(
+        this.settings,
+        this.imageWidth,
+        width,
+        height
+      );
+      if (seq !== this.renderSeq || !this.engine || this.disposed) return;
+      const out = this.engine.canvas.transferToImageBitmap();
+      this.onFrame?.({ bitmap: out, renderMs });
+    } catch (err) {
+      // Un contexto GPU perdido no debe convertirse en una promesa
+      // rechazada sin manejar: se comunica como error del motor.
+      if (this.disposed) return;
+      this.onError?.(err instanceof Error ? err.message : String(err));
+    }
   }
 
   private computeHistogram(src: ImageBitmap) {

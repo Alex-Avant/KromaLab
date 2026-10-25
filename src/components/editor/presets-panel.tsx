@@ -18,7 +18,7 @@ import { useEditorStore } from "@/store/editor-store";
  */
 export function PresetsPanel() {
   const settings = useEditorStore((s) => s.settings);
-  const setSettings = useEditorStore((s) => s.setSettings);
+  const applyPreset = useEditorStore((s) => s.applyPreset);
   const customPresets = useEditorStore((s) => s.customPresets);
   const setCustomPresets = useEditorStore((s) => s.setCustomPresets);
   const [name, setName] = React.useState("");
@@ -53,7 +53,7 @@ export function PresetsPanel() {
           <button
             key={preset.id}
             type="button"
-            onClick={() => setSettings(preset.settings)}
+            onClick={() => applyPreset(preset)}
             className="group w-full rounded-xs border border-border bg-surface px-3 py-2.5 text-left transition-colors duration-150 hover:bg-surface-raised"
           >
             <span className="flex items-baseline justify-between gap-2">
@@ -85,7 +85,7 @@ export function PresetsPanel() {
               <li key={preset.id} className="group flex items-stretch gap-1">
                 <button
                   type="button"
-                  onClick={() => setSettings(preset.settings)}
+                  onClick={() => applyPreset(preset)}
                   className="flex-1 rounded-xs border border-border bg-surface px-3 py-2 text-left transition-colors hover:bg-surface-raised"
                 >
                   <span className="block truncate text-sm text-foreground">
@@ -145,8 +145,9 @@ export function PresetsPanel() {
           FÓRMULA GUARDADA EN ESTE DISPOSITIVO
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          La fórmula incluye LPI, ángulo, forma de punto, curvas, modo y vista
-          de prueba. Se guarda localmente, nunca en un servidor.
+          La fórmula guarda LPI, ángulo, forma de punto, curvas, modo y vista
+          de prueba. Se aplica de forma atómica y se guarda solo en este
+          dispositivo.
         </p>
       </div>
     </div>

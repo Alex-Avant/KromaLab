@@ -43,6 +43,14 @@ export class PreviewFrameBuffer {
     this.current = bitmap;
   }
 
+  /** Descarta pendiente y actual (cambio de imagen) sin deshabilitar. */
+  reset(): void {
+    this.pending?.close();
+    this.pending = null;
+    this.current?.close();
+    this.current = null;
+  }
+
   /** Bitmap actualmente en pantalla (para diagnóstico/tests). */
   get currentBitmap(): ImageBitmap | null {
     return this.current;

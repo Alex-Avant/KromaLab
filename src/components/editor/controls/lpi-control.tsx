@@ -14,7 +14,11 @@ export function LpiControl() {
   const setSettings = useEditorStore((s) => s.setSettings);
 
   return (
-    <ControlGroup label="FRECUENCIA DE TRAMA" value={`${lpi} LPI`}>
+    <ControlGroup
+      label="FRECUENCIA DE TRAMA"
+      value={`${lpi} LPI`}
+      hint="Más LPI = puntos más pequeños y detalle fino. Menos LPI = trama gruesa y más cobertura."
+    >
       <Slider
         min={LPI_MIN}
         max={LPI_MAX}

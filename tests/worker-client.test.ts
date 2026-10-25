@@ -159,6 +159,39 @@ test("init/update después de dispose no publican ni filtran bitmaps", () => {
   assert.equal(worker.posted.length, before, "no se envían mensajes");
 });
 
+test("la exportación entrega el diagnóstico del worker", async () => {
+  const client = new HalftoneClient();
+  const worker = lastWorker();
+  const pending = client.export(DEFAULT_SETTINGS, "tiff", 2);
+  const message = worker.posted.at(-1) as { type: string; scale: number };
+  assert.equal(message.type, "export");
+  assert.equal(message.scale, 2);
+
+  const buffer = new ArrayBuffer(4);
+  const diagnostics = {
+    width: 10,
+    height: 5,
+    dpi: 600,
+    mime: "image/tiff",
+    tiles: 1,
+    alpha: false,
+    totalPixels: 50,
+    inkPixels: 5,
+  };
+  worker.emit({
+    type: "export-done",
+    buffer,
+    width: 10,
+    height: 5,
+    mime: "image/tiff",
+    diagnostics,
+  });
+
+  const result = await pending;
+  assert.equal(result.buffer, buffer);
+  assert.deepEqual(result.diagnostics, diagnostics);
+});
+
 test("frames de una carga anterior se descartan al crear un cliente nuevo", () => {
   const oldClient = new HalftoneClient();
   const oldWorker = lastWorker();

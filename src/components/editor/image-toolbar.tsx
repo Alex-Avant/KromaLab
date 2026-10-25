@@ -1,17 +1,28 @@
 "use client";
 
 import * as React from "react";
-import { DownloadIcon, ImagePlusIcon, RotateCcwIcon } from "lucide-react";
+import {
+  DownloadIcon,
+  ImagePlusIcon,
+  RotateCcwIcon,
+  Trash2Icon,
+} from "lucide-react";
 
 import { useEditorStore } from "@/store/editor-store";
 
 type ImageToolbarProps = {
   onReset: () => void;
   onFiles: (files: File[]) => void;
+  onRemove: () => void;
   onExport: () => void;
 };
 
-export function ImageToolbar({ onReset, onFiles, onExport }: ImageToolbarProps) {
+export function ImageToolbar({
+  onReset,
+  onFiles,
+  onRemove,
+  onExport,
+}: ImageToolbarProps) {
   const image = useEditorStore((s) => s.image);
   const notice = useEditorStore((s) => s.notice);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -61,6 +72,16 @@ export function ImageToolbar({ onReset, onFiles, onExport }: ImageToolbarProps) 
             >
               <ImagePlusIcon aria-hidden="true" className="size-3.5" />
               <span className="sr-only md:not-sr-only">Cambiar imagen</span>
+            </button>
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label="Quitar imagen"
+              title="Quitar imagen"
+              className="inline-flex h-8 items-center gap-1.5 rounded-xs border border-border bg-transparent px-2.5 text-xs text-muted-foreground transition-colors hover:border-warning/50 hover:text-warning focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              <Trash2Icon aria-hidden="true" className="size-3.5" />
+              <span className="sr-only md:not-sr-only">Quitar</span>
             </button>
             <button
               type="button"

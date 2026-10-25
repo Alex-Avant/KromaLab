@@ -128,6 +128,10 @@ ctx.onmessage = (e: MessageEvent<WorkerMessage>) => {
       bitmap = msg.bitmap;
       imageWidth = msg.imageWidth;
       imageHeight = msg.imageHeight;
+      if (msg.preview === false) {
+        // Solo exportación: no se crea contexto de preview.
+        break;
+      }
       void initEngine(bitmap).catch((err: unknown) => {
         post({
           type: "error",

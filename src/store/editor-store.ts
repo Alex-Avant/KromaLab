@@ -6,7 +6,10 @@ import {
   DEFAULT_SETTINGS,
   type HalftoneSettings,
 } from "@/lib/halftone/types";
-import type { Preset } from "@/lib/halftone/presets";
+import {
+  resolvePresetSettings,
+  type Preset,
+} from "@/lib/halftone/presets";
 
 export type ImageMeta = {
   name: string;
@@ -53,6 +56,7 @@ type EditorState = {
 
   setImage: (image: ImageMeta | null) => void;
   setSettings: (patch: Partial<HalftoneSettings>) => void;
+  applyPreset: (preset: Preset) => void;
   resetSettings: () => void;
   setStats: (patch: Partial<EditorStats>) => void;
   setHistogram: (bins: Uint32Array | null) => void;
@@ -82,6 +86,18 @@ export const useEditorStore = create<EditorState>((set) => ({
   setImage: (image) => set({ image }),
   setSettings: (patch) =>
     set((s) => ({ settings: { ...s.settings, ...patch } })),
+  applyPreset: (preset) =>
+    set((s) => {
+      const resolved = resolvePresetSettings(preset.settings);
+      // El fondo de prueba es una preferencia de vista: solo se aplica
+      // si la fórmula lo guardó explícitamente (fórmulas propias).
+      return {
+        settings:
+          preset.settings.bg !== undefined
+            ? resolved
+            : { ...resolved, bg: s.settings.bg },
+      };
+    }),
   resetSettings: () => set({ settings: DEFAULT_SETTINGS }),
   setStats: (patch) => set((s) => ({ stats: { ...s.stats, ...patch } })),
   setHistogram: (histogram) => set({ histogram }),

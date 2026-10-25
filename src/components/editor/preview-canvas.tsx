@@ -12,6 +12,7 @@ import type { FramePayload } from "@/lib/halftone/worker-client";
 
 export type PreviewCanvasHandle = {
   drawFrame: (frame: FramePayload) => void;
+  resetFrames: () => void;
 };
 
 type PreviewCanvasProps = {
@@ -140,7 +141,11 @@ export const PreviewCanvas = React.forwardRef<
     [frameBuffer]
   );
 
-  React.useImperativeHandle(ref, () => ({ drawFrame }), [drawFrame]);
+  React.useImperativeHandle(
+    ref,
+    () => ({ drawFrame, resetFrames: () => frameBuffer.reset() }),
+    [drawFrame, frameBuffer]
+  );
 
   // La vista ORIGINAL y el placeholder usan el archivo vía object URL:
   // no dependen de GPU ni de canvas, así que la muestra siempre se ve.

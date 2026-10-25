@@ -49,6 +49,18 @@ export const TILE_SIZE = 2048;
 export type ExportFormat = "png" | "tiff";
 export type ExportScale = 1 | 2 | 4;
 
+/** Diagnóstico de una exportación (visible en avanzado). */
+export type ExportDiagnostics = {
+  width: number;
+  height: number;
+  dpi: number;
+  mime: string;
+  tiles: number;
+  alpha: boolean;
+  totalPixels: number;
+  inkPixels?: number;
+};
+
 export const EXPORT_SCALES: ExportScale[] = [1, 2, 4];
 
 export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {

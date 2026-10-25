@@ -1,4 +1,5 @@
 import type {
+  ExportDiagnostics,
   ExportFormat,
   ExportScale,
   HalftoneSettings,
@@ -10,6 +11,8 @@ export type WorkerInitMsg = {
   bitmap: ImageBitmap;
   imageWidth: number;
   imageHeight: number;
+  /** false = modo diagnóstico de solo exportación (sin motor de preview). */
+  preview?: boolean;
 };
 export type WorkerSettingsMsg = {
   type: "settings";
@@ -42,6 +45,7 @@ export type MainExportDoneMsg = {
   width: number;
   height: number;
   mime: string;
+  diagnostics: ExportDiagnostics;
 };
 export type MainExportErrorMsg = { type: "export-error"; message: string };
 export type MainErrorMsg = { type: "error"; message: string };

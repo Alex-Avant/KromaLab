@@ -15,7 +15,11 @@ export function AngleControl() {
   const setSettings = useEditorStore((s) => s.setSettings);
 
   return (
-    <ControlGroup label="ÁNGULO DE TRAMA" value={`${angle}°`}>
+    <ControlGroup
+      label="ÁNGULO DE TRAMA"
+      value={`${angle}°`}
+      hint="Rota la rejilla de puntos. 45° es el ángulo estándar para DTF."
+    >
       <Slider
         min={ANGLE_MIN}
         max={ANGLE_MAX}

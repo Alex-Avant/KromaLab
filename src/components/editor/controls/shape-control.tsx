@@ -30,7 +30,11 @@ export function ShapeControl() {
   const setSettings = useEditorStore((s) => s.setSettings);
 
   return (
-    <ControlGroup label="FORMA DE PUNTO" value={SHAPE_LABELS[shape]}>
+    <ControlGroup
+      label="FORMA DE PUNTO"
+      value={SHAPE_LABELS[shape]}
+      hint="Forma del punto dentro de cada célula de la trama."
+    >
       <div
         role="group"
         aria-label="Forma de punto"

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-transform-types --import ./tests/register.mjs --test tests/*.test.ts",
-    "test:e2e": "node tests/e2e.mjs"
+    "test:e2e": "node tests/e2e.mjs && node tests/export-e2e.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",

@@ -15,10 +15,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { useEditorStore } from "@/store/editor-store";
 import {
+  EXPORT_DPI,
   EXPORT_FORMAT_LABELS,
   EXPORT_MAX_PX,
   EXPORT_SCALES,
   physicalSizeCm,
+  type ExportDiagnostics,
   type ExportFormat,
   type ExportScale,
   type HalftoneSettings,
@@ -34,6 +36,7 @@ type ExportResult = {
   width: number;
   height: number;
   mime: string;
+  diagnostics: ExportDiagnostics;
 };
 
 export type ExportRunner = (
@@ -57,6 +60,7 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
   const [scale, setScale] = React.useState<ExportScale>(1);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<ExportResult | null>(null);
 
   if (!image) return null;
 
@@ -64,7 +68,9 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
 
   const outW = image.width * scale;
   const outH = image.height * scale;
-  const { widthCm, heightCm } = physicalSizeCm(outW, outH);
+  const effectiveDpi = EXPORT_DPI * scale;
+  // La escala aumenta la resolución, no el tamaño físico impreso.
+  const { widthCm, heightCm } = physicalSizeCm(image.width, image.height);
   const tooLarge = outW > EXPORT_MAX_PX || outH > EXPORT_MAX_PX;
   const exhausted = quota <= 0;
 
@@ -73,10 +79,11 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await runner(settings, format, scale);
+      const exported = await runner(settings, format, scale);
       // La cuota se consume solo cuando el archivo existe.
       consumeExport();
-      const blob = new Blob([result.buffer], { type: result.mime });
+      setResult(exported);
+      const blob = new Blob([exported.buffer], { type: exported.mime });
       const url = URL.createObjectURL(blob);
       const ext = format === "png" ? "png" : "tif";
       const base = image.name.replace(/\.[^.]+$/, "");
@@ -100,7 +107,10 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (o) setError(null);
+        if (o) {
+          setError(null);
+          setResult(null);
+        }
       }}
     >
       <DialogContent className="max-w-md">
@@ -187,12 +197,24 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
             </div>
             <div className="mt-1 flex items-baseline justify-between">
               <span className="tech-value text-[10px] tracking-[0.18em] text-muted-foreground">
-                FÍSICO A 300 DPI
+                RESOLUCIÓN FINAL
+              </span>
+              <span className="tech-value text-xs text-foreground">
+                {effectiveDpi} DPI
+              </span>
+            </div>
+            <div className="mt-1 flex items-baseline justify-between">
+              <span className="tech-value text-[10px] tracking-[0.18em] text-muted-foreground">
+                TAMAÑO FÍSICO
               </span>
               <span className="tech-value text-xs text-foreground">
                 {widthCm.toFixed(1)} × {heightCm.toFixed(1)} CM
               </span>
             </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              La película se exporta sobre fondo transparente. El fondo de
+              prueba del editor no se incluye en el archivo.
+            </p>
           </div>
 
           {tooLarge && (
@@ -204,6 +226,49 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
             <p role="alert" className="tech-value text-[10px] tracking-[0.08em] text-warning">
               {error}
             </p>
+          )}
+
+          {result && result.diagnostics && (
+            <details className="rounded-xs border border-border bg-surface px-3.5 py-2.5">
+              <summary className="tech-value cursor-pointer text-[10px] tracking-[0.14em] text-muted-foreground">
+                DIAGNÓSTICO DE EXPORTACIÓN
+              </summary>
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                <dt className="text-muted-foreground">Archivo</dt>
+                <dd className="tech-value text-right text-foreground">
+                  {result.width} × {result.height} PX
+                </dd>
+                <dt className="text-muted-foreground">MIME</dt>
+                <dd className="tech-value text-right text-foreground">
+                  {result.diagnostics.mime}
+                </dd>
+                <dt className="text-muted-foreground">DPI</dt>
+                <dd className="tech-value text-right text-foreground">
+                  {result.diagnostics.dpi}
+                </dd>
+                <dt className="text-muted-foreground">Tiles</dt>
+                <dd className="tech-value text-right text-foreground">
+                  {result.diagnostics.tiles}
+                </dd>
+                <dt className="text-muted-foreground">Alfa</dt>
+                <dd className="tech-value text-right text-foreground">
+                  {result.diagnostics.alpha ? "SÍ" : "NO (1-BIT)"}
+                </dd>
+                {result.diagnostics.inkPixels !== undefined && (
+                  <>
+                    <dt className="text-muted-foreground">Tinta</dt>
+                    <dd className="tech-value text-right text-foreground">
+                      {(
+                        (result.diagnostics.inkPixels /
+                          result.diagnostics.totalPixels) *
+                        100
+                      ).toFixed(1)}
+                      %
+                    </dd>
+                  </>
+                )}
+              </dl>
+            </details>
           )}
 
           <div className="flex items-center justify-between rounded-xs border border-border px-3.5 py-2.5">

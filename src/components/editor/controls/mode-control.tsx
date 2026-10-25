@@ -24,7 +24,10 @@ export function ModeControl() {
   const setSettings = useEditorStore((s) => s.setSettings);
 
   return (
-    <ControlGroup label="MODO DE TINTA">
+    <ControlGroup
+      label="MODO DE TINTA"
+      hint="Elige la trama de luminancia o el canal de tinta blanca 1-bit."
+    >
       <div role="group" aria-label="Modo de tinta" className="space-y-1.5">
         {modes.map((m) => (
           <button

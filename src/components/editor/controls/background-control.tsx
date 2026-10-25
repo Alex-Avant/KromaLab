@@ -18,7 +18,11 @@ export function BackgroundControl() {
   const setSettings = useEditorStore((s) => s.setSettings);
 
   return (
-    <ControlGroup label="VISTA DE PRUEBA" value={BG_LABELS[bg]}>
+    <ControlGroup
+      label="VISTA DE PRUEBA"
+      value={BG_LABELS[bg]}
+      hint="Solo cambia el fondo del preview; la exportación va siempre transparente."
+    >
       <div
         role="group"
         aria-label="Fondo de la vista de prueba"

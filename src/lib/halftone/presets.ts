@@ -1,6 +1,9 @@
 "use client";
 
-import type { HalftoneSettings } from "@/lib/halftone/types";
+import {
+  DEFAULT_SETTINGS,
+  type HalftoneSettings,
+} from "@/lib/halftone/types";
 
 export type Preset = {
   id: string;
@@ -8,6 +11,17 @@ export type Preset = {
   tag?: string;
   settings: Partial<HalftoneSettings>;
 };
+
+/**
+ * Resuelve una fórmula (posiblemente parcial) a un estado COMPLETO.
+ * Aplicar una fórmula es atómico: los parámetros no incluidos vuelven a
+ * su valor por defecto en lugar de heredar los de la fórmula anterior.
+ */
+export function resolvePresetSettings(
+  settings: Partial<HalftoneSettings>
+): HalftoneSettings {
+  return { ...DEFAULT_SETTINGS, ...settings };
+}
 
 /** Fórmulas de fábrica, calibradas para flujo DTF. */
 export const BUILTIN_PRESETS: Preset[] = [

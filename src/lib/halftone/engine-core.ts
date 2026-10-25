@@ -205,6 +205,14 @@ export class HalftoneEngineCore implements HalftoneRenderer {
   gl.uniform3f(u.uDotColor, dot[0], dot[1], dot[2]);
   gl.uniform1i(u.uSourceColor, useSourceColor ? 1 : 0);
 
+  // `setBitmap` desvincula la textura tras subirla. Hay que enlazarla de
+  // nuevo en cada render o el shader muestrea la textura por defecto y la
+  // trama pierde toda la información de la imagen (puntos uniformes).
+  if (this.texture) {
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+  }
+
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.flush();
 

@@ -77,6 +77,9 @@ export async function renderExport(
   const tileEngine = getExportEngine(canvasSize);
   tileEngine.setBitmap(bitmap);
   const totalPixels = outW * outH;
+  // Diagnóstico: si la exportación pierde la imagen (textura no vinculada),
+  // la cobertura media por bloque es constante y alphaStdDev ≈ 0.
+  let alphaStdDev = 0;
 
   for (const rect of tiles) {
     tileEngine.render(exportSettings, imageWidth, outW, outH, {
@@ -100,6 +103,26 @@ export async function renderExport(
       rect.h
     );
     tileBitmap.close();
+  }
+
+  {
+    const probe = new OffscreenCanvas(64, 64);
+    const probeCtx = probe.getContext("2d");
+    if (probeCtx) {
+      probeCtx.drawImage(big, 0, 0, 64, 64);
+      const data = probeCtx.getImageData(0, 0, 64, 64).data;
+      let sum = 0;
+      let sumSquares = 0;
+      let count = 0;
+      for (let i = 3; i < data.length; i += 4) {
+        const alpha = data[i] / 255;
+        sum += alpha;
+        sumSquares += alpha * alpha;
+        count += 1;
+      }
+      const mean = sum / count;
+      alphaStdDev = Math.sqrt(Math.max(0, sumSquares / count - mean * mean));
+    }
   }
 
     if (format === "png") {
@@ -132,6 +155,7 @@ export async function renderExport(
           totalPixels,
           transparentPixels,
           inkPixels,
+          alphaStdDev,
         },
       };
     }
@@ -161,6 +185,7 @@ export async function renderExport(
         totalPixels,
         transparentPixels: totalPixels - inkPixels,
         inkPixels,
+        alphaStdDev,
       },
     };
 }

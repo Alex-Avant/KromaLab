@@ -78,6 +78,8 @@ export type ExportDiagnostics = {
   totalPixels: number;
   transparentPixels: number;
   inkPixels: number;
+  /** Desviación de la cobertura media (0 = rejilla uniforme sin imagen). */
+  alphaStdDev: number;
 };
 
 export const EXPORT_SCALES: ExportScale[] = [1, 2, 4];

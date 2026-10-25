@@ -252,6 +252,10 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
                   ).toFixed(1)}
                   %
                 </dd>
+                <dt className="text-muted-foreground">Variación</dt>
+                <dd className="tech-value text-right text-foreground">
+                  {(result.diagnostics.alphaStdDev * 100).toFixed(1)}%
+                </dd>
               </dl>
             </details>
           )}

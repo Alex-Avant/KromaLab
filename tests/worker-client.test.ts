@@ -178,6 +178,7 @@ test("la exportación entrega el diagnóstico del worker", async () => {
     totalPixels: 50,
     transparentPixels: 45,
     inkPixels: 5,
+    alphaStdDev: 0.2,
   };
   worker.emit({
     type: "export-done",

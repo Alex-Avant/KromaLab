@@ -12,6 +12,9 @@ export type LoadedImage = {
 
 async function decodeOnce(file: File, width: number, height: number): Promise<ImageBitmap> {
   return createImageBitmap(file, {
+    // Respeta la orientación EXIF de fotos de móvil, igual que el <img>
+    // que usa el preview.
+    imageOrientation: "from-image",
     resizeWidth: width,
     resizeHeight: height,
     resizeQuality: "high",
@@ -31,7 +34,9 @@ export async function fileToBitmaps(file: File): Promise<LoadedImage> {
     );
   }
 
-  const probe = await createImageBitmap(file);
+  const probe = await createImageBitmap(file, {
+    imageOrientation: "from-image",
+  });
   const { width, height, resized } = fitWithin(probe.width, probe.height);
   probe.close();
 

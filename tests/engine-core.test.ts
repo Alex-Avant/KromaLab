@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { HalftoneEngineCore } from "@/lib/halftone/engine-core";
+import { FRAGMENT_SOURCE } from "@/lib/halftone/glsl";
 import { DEFAULT_SETTINGS } from "@/lib/halftone/types";
 
 type Event = { name: string; detail?: string };
@@ -10,6 +11,7 @@ type Event = { name: string; detail?: string };
 class FakeGL {
   readonly events: Event[] = [];
   readonly texture = { kind: "image-texture" };
+  readonly UNPACK_FLIP_Y_WEBGL = 0x9240;
 
   createShader() {
     return {};
@@ -54,7 +56,9 @@ class FakeGL {
     this.events.push({ name: "uniform3f", detail: `${location}=${x}` });
   }
   disable() {}
-  pixelStorei() {}
+  pixelStorei(pname: number, value: number) {
+    this.events.push({ name: "pixelStorei", detail: `${pname}:${value}` });
+  }
   createTexture() {
     return this.texture;
   }
@@ -115,6 +119,27 @@ test("la textura de la imagen queda vinculada antes de dibujar", () => {
   engine.render(DEFAULT_SETTINGS, 64, 64, 48);
 
   assertTextureBoundBeforeDraw(gl.events, "primer render");
+});
+
+test("la textura se sube sin flip y el shader invierte V", () => {
+  const gl = new FakeGL();
+  const engine = new HalftoneEngineCore(fakeCanvas(gl));
+  engine.setBitmap(fakeBitmap(8, 8));
+
+  const flipWrites = gl.events.filter(
+    (event) =>
+      event.name === "pixelStorei" &&
+      event.detail?.startsWith(`${gl.UNPACK_FLIP_Y_WEBGL}:`)
+  );
+  assert.ok(flipWrites.length > 0, "debe configurar UNPACK_FLIP_Y_WEBGL");
+  assert.ok(
+    flipWrites.every((event) => event.detail?.endsWith(":0")),
+    "UNPACK_FLIP_Y_WEBGL debe quedar en 0 (textura en orden superior→inferior)"
+  );
+  assert.ok(
+    FRAGMENT_SOURCE.includes("1.0 - px.y / uResolution.y"),
+    "el shader debe invertir V al muestrear"
+  );
 });
 
 test("tras cargar otra imagen se vuelve a vincular la textura", () => {

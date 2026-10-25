@@ -53,8 +53,11 @@ void main() {
   // Coordenadas absolutas: suma del origen del tile + posición del fragmento.
   vec2 px = gl_FragCoord.xy + uTileOrigin;
 
-  // 1) Muestra de la imagen original.
-  vec3 src = texture(uImage, px / uResolution).rgb;
+  // 1) Muestra de la imagen original. La textura se sube sin flip (orden
+  //    superior→inferior), pero gl_FragCoord es inferior→superior: se
+  //    invierte V para que la imagen no salga en espejo vertical.
+  vec2 uv = vec2(px.x / uResolution.x, 1.0 - px.y / uResolution.y);
+  vec3 src = texture(uImage, uv).rgb;
   float lum = luma(src);
   // Color del punto: original (modo color) o tinta uniforme (grises/DTF).
   vec3 inkColor = uSourceColor ? src : uDotColor;

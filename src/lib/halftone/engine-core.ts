@@ -132,7 +132,10 @@ export class HalftoneEngineCore implements HalftoneRenderer {
     gl.uniform1i(this.uniforms.uImage, 0);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+    // La textura se guarda en el mismo orden que el ImageBitmap (arriba
+    // abajo). El shader invierte V al muestrear; el flip de UNPACK no es
+    // fiable con ImageBitmap en todos los navegadores.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
   }
 
   /** Sube (o reemplaza) la imagen original a la GPU. */
@@ -143,6 +146,7 @@ export class HalftoneEngineCore implements HalftoneRenderer {
       if (!this.texture) throw new Error("No se pudo crear la textura.");
     }
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
     gl.texImage2D(
       gl.TEXTURE_2D,
       0,

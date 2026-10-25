@@ -102,10 +102,20 @@ export async function renderExport(
     tileBitmap.close();
   }
 
-  if (format === "png") {
+    if (format === "png") {
       // PNG RGBA por filas (alfa conservado, sin convertToBlob).
+      let transparentPixels = 0;
+      let inkPixels = 0;
       const png = await encodePngRgba(outW, outH, (y) =>
-        ctx2d.getImageData(0, y, outW, 1).data
+        (() => {
+          const row = ctx2d.getImageData(0, y, outW, 1).data;
+          for (let x = 0; x < outW; x++) {
+            const alpha = row[x * 4 + 3];
+            if (alpha < 255) transparentPixels += 1;
+            if (alpha >= 128) inkPixels += 1;
+          }
+          return row;
+        })()
       );
       return {
         buffer: png.buffer as ArrayBuffer,
@@ -118,8 +128,10 @@ export async function renderExport(
           dpi,
           mime: "image/png",
           tiles: tiles.length,
-          alpha: true,
+          alpha: transparentPixels > 0,
           totalPixels,
+          transparentPixels,
+          inkPixels,
         },
       };
     }
@@ -147,6 +159,7 @@ export async function renderExport(
         tiles: tiles.length,
         alpha: false,
         totalPixels,
+        transparentPixels: totalPixels - inkPixels,
         inkPixels,
       },
     };

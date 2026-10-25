@@ -11,11 +11,11 @@ import { Button } from "@/components/ui/button";
 export const metadata: Metadata = {
   title: "KromaLab Pro",
   description:
-    "KromaLab Pro: exportaciones ilimitadas, cola de síntesis prioritaria y acceso anticipado a nuevos instrumentos del laboratorio.",
+    "Funciones adicionales de KromaLab en preparación. El editor y las exportaciones locales están disponibles durante el lanzamiento.",
 };
 
 const comparison = [
-  { feature: "Exportaciones diarias", free: "3 / día", pro: "Ilimitadas" },
+  { feature: "Exportaciones locales", free: "Sin límite", pro: "Sin límite" },
   { feature: "Resolución de entrada", free: "4096 px", pro: "4096 px" },
   { feature: "Escala de exportación", free: "1× / 2× / 4×", pro: "1× / 2× / 4×" },
   { feature: "Formato TIFF 1-bit", free: true, pro: true },
@@ -48,12 +48,12 @@ export default function ProPage() {
             </span>
           </p>
           <h1 className="mx-auto mt-4 max-w-2xl font-display text-4xl leading-[1.05] font-semibold tracking-tight text-foreground sm:text-5xl">
-            Sin límites de síntesis
+            KromaLab durante el lanzamiento
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-            El laboratorio es gratuito para calibrar: 3 exportaciones diarias,
-            todos los instrumentos y procesamiento local. Pro elimina la cuota
-            y abre la cola de prioridad para los nuevos módulos.
+            El editor, todos los instrumentos y las exportaciones locales están
+            disponibles sin cuota. Las funciones adicionales de Pro se anunciarán
+            cuando exista un método de activación.
           </p>
         </div>
       </header>
@@ -70,12 +70,12 @@ export default function ProPage() {
                 0 €
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Para calibrar y probar el flujo.
+                Para calibrar y producir durante el lanzamiento.
               </p>
               <ul className="mt-5 space-y-2 text-sm text-foreground">
                 <li className="flex items-center gap-2">
                   <CheckIcon aria-hidden="true" className="size-4 text-primary" />
-                  3 exportaciones diarias
+                  Exportaciones locales sin límite
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckIcon aria-hidden="true" className="size-4 text-primary" />
@@ -99,15 +99,15 @@ export default function ProPage() {
                 PRO
               </p>
               <p className="mt-2 font-display text-4xl font-semibold text-foreground">
-                9 €<span className="text-base text-muted-foreground"> / mes</span>
+                Próximamente
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Para producción sin pausas.
+                Funciones adicionales en preparación.
               </p>
               <ul className="mt-5 space-y-2 text-sm text-foreground">
                 <li className="flex items-center gap-2">
                   <CheckIcon aria-hidden="true" className="size-4 text-warning" />
-                  Exportaciones ilimitadas
+                  Exportaciones locales sin límite
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckIcon aria-hidden="true" className="size-4 text-warning" />
@@ -165,9 +165,9 @@ export default function ProPage() {
               Pro no cambia dónde corre tu imagen
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              La cuota se valida contra tu cuenta, no contra tus archivos. La
-              imagen original sigue procesándose en tu dispositivo en ambos
-              planes — Pro solo levanta el límite diario de exportación.
+              La imagen original siempre se procesa en tu dispositivo y no se
+              sube a ningún servidor. Las exportaciones locales no tienen un
+              límite diario.
             </p>
           </div>
         </Reveal>
@@ -176,9 +176,9 @@ export default function ProPage() {
         <Reveal>
           <div className="flex flex-col items-center gap-4 pb-14 text-center">
             <p className="max-w-md text-sm text-muted-foreground">
-              La activación de Pro llegará junto con las cuentas del
-              laboratorio. Mientras tanto, los 3 exports diarios gratuitos
-              cubren el flujo de calibración completo.
+              Las funciones adicionales se anunciarán cuando esté disponible
+              su método de activación. El editor sigue abierto para calibrar y
+              exportar localmente.
             </p>
             <Button asChild>
               <Link href="/herramientas/semitonos-dtf">

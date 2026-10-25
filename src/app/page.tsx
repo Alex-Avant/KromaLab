@@ -49,7 +49,7 @@ const jsonLd = {
     "@type": "Offer",
     price: "0",
     priceCurrency: "USD",
-    description: "3 exportaciones diarias gratuitas. Plan Pro ilimitado.",
+    description: "Acceso gratuito durante el lanzamiento y exportaciones locales sin límite.",
   },
   featureList: [
     "Síntesis de semitonos DTF en tiempo real",

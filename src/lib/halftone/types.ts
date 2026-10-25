@@ -5,6 +5,19 @@
 
 export type DotShape = "round" | "ellipse" | "diamond" | "line";
 
+/**
+ * Escala del radio de cada forma para que el área del punto sea
+ * aproximadamente proporcional a la cobertura de tinta. En coordenadas
+ * de célula: círculo dist=length(f*2), elipse dist=length(f*(2,3.64)) y
+ * diamante dist=(|x|+|y|)*sqrt(2).
+ */
+export const DOT_RADIUS_SCALE: Record<DotShape, number> = {
+  round: 1.1283791670955126, // 2 / sqrt(pi)
+  ellipse: 1.5222667215103918, // sqrt(2 * 3.64 / pi)
+  diamond: 1,
+  line: 1,
+};
+
 export type InkMode = "luminance" | "white";
 
 export type GarmentBg = "transparent" | "black" | "white";
@@ -58,7 +71,8 @@ export type ExportDiagnostics = {
   tiles: number;
   alpha: boolean;
   totalPixels: number;
-  inkPixels?: number;
+  transparentPixels: number;
+  inkPixels: number;
 };
 
 export const EXPORT_SCALES: ExportScale[] = [1, 2, 4];

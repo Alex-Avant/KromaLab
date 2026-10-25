@@ -11,6 +11,8 @@
 /* proporcional a la raíz de la cobertura — área ∝ tinta.              */
 /* ------------------------------------------------------------------ */
 
+import { DOT_RADIUS_SCALE } from "@/lib/halftone/types";
+
 export const VERTEX_SOURCE = /* glsl */ `#version 300 es
 // Triángulo de pantalla completa sin atributos (gl_VertexID).
 // Cubre el viewport en un solo draw call.
@@ -75,9 +77,6 @@ void main() {
   // Suavizado de borde: ~1.5 px nominales, normalizado a la célula.
   float edge = 1.5 / max(uCellSize, 2.0);
 
-  // Radio objetivo con mapeo área-lineal (área del punto ∝ cobertura).
-  float rr = 0.5 * sqrt(coverage);
-
   if (uShape == 3) {
     // LÍNEA: banda horizontal de altura ∝ cobertura.
     float hh = 0.5 * coverage;
@@ -91,6 +90,12 @@ void main() {
     }
     return;
   }
+
+  // Área del punto ∝ cobertura, compensada por la geometría.
+  float radiusScale = ${DOT_RADIUS_SCALE.round.toFixed(9)};
+  if (uShape == 1) radiusScale = ${DOT_RADIUS_SCALE.ellipse.toFixed(9)};
+  else if (uShape == 2) radiusScale = ${DOT_RADIUS_SCALE.diamond.toFixed(1)};
+  float rr = radiusScale * sqrt(coverage);
 
   // 4) Distancia normalizada al centro de la célula según la forma.
   float dist;

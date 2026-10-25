@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { DownloadIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -25,11 +24,6 @@ import {
   type ExportScale,
   type HalftoneSettings,
 } from "@/lib/halftone/types";
-import {
-  FREE_DAILY_EXPORTS,
-  consumeExport,
-  remainingExports,
-} from "@/lib/freemium/quota";
 
 type ExportResult = {
   buffer: ArrayBuffer;
@@ -47,8 +41,7 @@ export type ExportRunner = (
 
 /**
  * Modal de exportación (⌘E). Muestra el tamaño físico final a 300 DPI,
- * consume la cuota freemium y descarga el archivo sin pasar por
- * ningún servidor.
+ * diagnostica el archivo y descarga sin límites ni paso por servidor.
  */
 export function ExportModal({ runner }: { runner: ExportRunner }) {
   const open = useEditorStore((s) => s.exportOpen);
@@ -61,10 +54,11 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<ExportResult | null>(null);
+  const debugExport =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debugExport") === "1";
 
   if (!image) return null;
-
-  const quota = remainingExports();
 
   const outW = image.width * scale;
   const outH = image.height * scale;
@@ -72,16 +66,13 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
   // La escala aumenta la resolución, no el tamaño físico impreso.
   const { widthCm, heightCm } = physicalSizeCm(image.width, image.height);
   const tooLarge = outW > EXPORT_MAX_PX || outH > EXPORT_MAX_PX;
-  const exhausted = quota <= 0;
 
   const doExport = async () => {
-    if (tooLarge || exhausted || busy) return;
+    if (tooLarge || busy) return;
     setBusy(true);
     setError(null);
     try {
       const exported = await runner(settings, format, scale);
-      // La cuota se consume solo cuando el archivo existe.
-      consumeExport();
       setResult(exported);
       const blob = new Blob([exported.buffer], { type: exported.mime });
       const url = URL.createObjectURL(blob);
@@ -94,7 +85,7 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 4000);
-      setOpen(false);
+      if (!debugExport) setOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "La exportación falló.");
     } finally {
@@ -212,8 +203,10 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
               </span>
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              La película se exporta sobre fondo transparente. El fondo de
-              prueba del editor no se incluye en el archivo.
+              El archivo contiene los puntos de tinta sobre transparencia, no
+              la foto original como fondo. La imagen se representa mediante el
+              tamaño y la densidad de esos puntos. El fondo de prueba solo se
+              aplica al preview.
             </p>
           </div>
 
@@ -228,7 +221,7 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
             </p>
           )}
 
-          {result && result.diagnostics && (
+          {result && debugExport && (
             <details className="rounded-xs border border-border bg-surface px-3.5 py-2.5">
               <summary className="tech-value cursor-pointer text-[10px] tracking-[0.14em] text-muted-foreground">
                 DIAGNÓSTICO DE EXPORTACIÓN
@@ -252,72 +245,48 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
                 </dd>
                 <dt className="text-muted-foreground">Alfa</dt>
                 <dd className="tech-value text-right text-foreground">
-                  {result.diagnostics.alpha ? "SÍ" : "NO (1-BIT)"}
+                  {result.diagnostics.alpha ? "SÍ" : "NO (1-BIT)"} ·{" "}
+                  {result.diagnostics.transparentPixels} px transparentes
                 </dd>
-                {result.diagnostics.inkPixels !== undefined && (
-                  <>
-                    <dt className="text-muted-foreground">Tinta</dt>
-                    <dd className="tech-value text-right text-foreground">
-                      {(
-                        (result.diagnostics.inkPixels /
-                          result.diagnostics.totalPixels) *
-                        100
-                      ).toFixed(1)}
-                      %
-                    </dd>
-                  </>
-                )}
+                <dt className="text-muted-foreground">Tinta</dt>
+                <dd className="tech-value text-right text-foreground">
+                  {result.diagnostics.inkPixels} px ·{" "}
+                  {(
+                    (result.diagnostics.inkPixels /
+                      result.diagnostics.totalPixels) *
+                    100
+                  ).toFixed(1)}
+                  %
+                </dd>
               </dl>
             </details>
           )}
 
-          <div className="flex items-center justify-between rounded-xs border border-border px-3.5 py-2.5">
-            <span className="tech-value text-[10px] tracking-[0.14em] text-muted-foreground">
-              CUOTA DIARIA GRATUITA
-            </span>
-            <span
-              className={cn(
-                "tech-value text-xs",
-                exhausted ? "text-warning" : "text-foreground"
-              )}
-            >
-              {quota} / {FREE_DAILY_EXPORTS}
-            </span>
-          </div>
+          <p className="tech-value text-center text-[10px] tracking-[0.12em] text-muted-foreground">
+            EXPORTACIONES LOCALES SIN LÍMITE DIARIO
+          </p>
 
-          {exhausted ? (
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">
-                Cuota gratuita de hoy agotada. Pasa a Pro para exportaciones
-                ilimitadas.
-              </p>
-              <Button asChild className="w-full" variant="secondary">
-                <Link href="/pro">Ver KromaLab Pro</Link>
-              </Button>
-            </div>
-          ) : (
-            <Button
-              onClick={() => void doExport()}
-              disabled={tooLarge || busy}
-              className="w-full bg-warning text-warning-foreground hover:bg-warning/85"
-            >
-              {busy ? (
-                <span className="flex items-center gap-1" aria-label="Exportando">
-                  EXPORTANDO
-                  <span className="inline-flex gap-0.5" aria-hidden="true">
-                    <span className="size-1 animate-pulse rounded-full bg-warning-foreground [animation-delay:0ms]" />
-                    <span className="size-1 animate-pulse rounded-full bg-warning-foreground [animation-delay:150ms]" />
-                    <span className="size-1 animate-pulse rounded-full bg-warning-foreground [animation-delay:300ms]" />
-                  </span>
+          <Button
+            onClick={() => void doExport()}
+            disabled={tooLarge || busy}
+            className="w-full bg-warning text-warning-foreground hover:bg-warning/85"
+          >
+            {busy ? (
+              <span className="flex items-center gap-1" aria-label="Exportando">
+                EXPORTANDO
+                <span className="inline-flex gap-0.5" aria-hidden="true">
+                  <span className="size-1 animate-pulse rounded-full bg-warning-foreground [animation-delay:0ms]" />
+                  <span className="size-1 animate-pulse rounded-full bg-warning-foreground [animation-delay:150ms]" />
+                  <span className="size-1 animate-pulse rounded-full bg-warning-foreground [animation-delay:300ms]" />
                 </span>
-              ) : (
-                <>
-                  <DownloadIcon aria-hidden="true" />
-                  Exportar {format === "png" ? "PNG" : "TIFF"}
-                </>
-              )}
-            </Button>
-          )}
+              </span>
+            ) : (
+              <>
+                <DownloadIcon aria-hidden="true" />
+                Exportar {format === "png" ? "PNG" : "TIFF"}
+              </>
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

@@ -176,6 +176,7 @@ test("la exportación entrega el diagnóstico del worker", async () => {
     tiles: 1,
     alpha: false,
     totalPixels: 50,
+    transparentPixels: 45,
     inkPixels: 5,
   };
   worker.emit({

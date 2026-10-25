@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_SETTINGS,
+  DOT_RADIUS_SCALE,
   cellCountAcross,
   cellSizePx,
   fitWithin,
@@ -11,6 +12,8 @@ import {
   previewSize,
   snapAngle,
 } from "@/lib/halftone/types";
+import { FRAGMENT_SOURCE } from "@/lib/halftone/glsl";
+import { HALFTONE_COMPUTE_WGSL } from "@/lib/halftone/wgsl";
 
 test("matemática de trama: célula, DPI de preview y células por ancho", () => {
   assert.equal(cellSizePx(55, 300), 300 / 55);
@@ -55,4 +58,30 @@ test("los ajustes por defecto son coherentes con los límites", () => {
   assert.equal(DEFAULT_SETTINGS.shape, "round");
   assert.equal(DEFAULT_SETTINGS.mode, "luminance");
   assert.equal(DEFAULT_SETTINGS.bg, "transparent");
+});
+
+test("el radio de cada forma conserva el área relativa de cobertura", () => {
+  const coverage = 0.4;
+  const roundArea =
+    (Math.PI / 4) * DOT_RADIUS_SCALE.round ** 2 * coverage;
+  const ellipseArea =
+    (Math.PI / (2 * 3.64)) * DOT_RADIUS_SCALE.ellipse ** 2 * coverage;
+  const diamondArea = DOT_RADIUS_SCALE.diamond ** 2 * coverage;
+
+  for (const area of [roundArea, ellipseArea, diamondArea]) {
+    assert.ok(Math.abs(area - coverage) < 1e-10);
+  }
+  // La fórmula queda espejada en los dos backends.
+  assert.ok(
+    FRAGMENT_SOURCE.includes(
+      `float radiusScale = ${DOT_RADIUS_SCALE.round.toFixed(9)}`
+    )
+  );
+  assert.ok(FRAGMENT_SOURCE.includes("float rr = radiusScale * sqrt(coverage)"));
+  assert.ok(
+    HALFTONE_COMPUTE_WGSL.includes(
+      `var radiusScale = ${DOT_RADIUS_SCALE.round.toFixed(9)}`
+    )
+  );
+  assert.ok(HALFTONE_COMPUTE_WGSL.includes("let rr = radiusScale * sqrt(coverage)"));
 });

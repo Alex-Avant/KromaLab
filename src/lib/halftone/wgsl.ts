@@ -8,6 +8,8 @@
 /* render pass trivial lo presenta en el lienzo (premultiplied alpha). */
 /* ------------------------------------------------------------------ */
 
+import { DOT_RADIUS_SCALE } from "@/lib/halftone/types";
+
 export const HALFTONE_COMPUTE_WGSL = /* wgsl */ `
 // Uniforms del motor (ver webgpu-renderer.ts para el layout de bytes).
 struct Uniforms {
@@ -71,9 +73,6 @@ fn halftone(@builtin(global_invocation_id) gid: vec3<u32>) {
   // Suavizado de borde: ~1.5 px nominales.
   let edge = 1.5 / max(u.cellSize, 2.0);
 
-  // Radio objetivo con mapeo área-lineal.
-  let rr = 0.5 * sqrt(coverage);
-
   var a: f32;
   if (u.shape == 3u) {
     // LÍNEA: banda horizontal de altura ∝ cobertura.
@@ -83,6 +82,14 @@ fn halftone(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (u.hardEdge != 0u) { a = select(0.0, 1.0, band <= hh); }
   } else {
     // 4) Distancia normalizada al centro de la célula según la forma.
+    // La escala hace que el área del punto siga la cobertura para cada forma.
+    var radiusScale = ${DOT_RADIUS_SCALE.round.toFixed(9)};
+    if (u.shape == 1u) {
+      radiusScale = ${DOT_RADIUS_SCALE.ellipse.toFixed(9)};
+    } else if (u.shape == 2u) {
+      radiusScale = ${DOT_RADIUS_SCALE.diamond.toFixed(1)};
+    }
+    let rr = radiusScale * sqrt(coverage);
     var dist: f32;
     if (u.shape == 1u) {
       // ELIPSE: comprimida en Y → punto en cadena.

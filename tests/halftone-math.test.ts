@@ -3,7 +3,10 @@ import test from "node:test";
 
 import {
   DEFAULT_SETTINGS,
+  DOT_BLACK,
   DOT_RADIUS_SCALE,
+  DOT_WHITE,
+  resolveInkColor,
   cellCountAcross,
   cellSizePx,
   fitWithin,
@@ -58,6 +61,31 @@ test("los ajustes por defecto son coherentes con los límites", () => {
   assert.equal(DEFAULT_SETTINGS.shape, "round");
   assert.equal(DEFAULT_SETTINGS.mode, "luminance");
   assert.equal(DEFAULT_SETTINGS.bg, "transparent");
+});
+
+test("el color original es el modo por defecto y la escala de grises es opcional", () => {
+  assert.equal(DEFAULT_SETTINGS.colorMode, "color");
+  assert.ok(FRAGMENT_SOURCE.includes("uSourceColor"));
+  assert.ok(
+    FRAGMENT_SOURCE.includes("vec3 inkColor = uSourceColor ? src : uDotColor")
+  );
+  assert.ok(HALFTONE_COMPUTE_WGSL.includes("useSourceColor"));
+  assert.ok(HALFTONE_COMPUTE_WGSL.includes("select(u.dotColor, src"));
+});
+
+test("resolveInkColor: color original, grises y tinta blanca", () => {
+  assert.deepEqual(resolveInkColor(DEFAULT_SETTINGS), {
+    useSourceColor: true,
+    dotColor: DOT_WHITE,
+  });
+  assert.deepEqual(
+    resolveInkColor({ ...DEFAULT_SETTINGS, colorMode: "grayscale" }),
+    { useSourceColor: false, dotColor: DOT_BLACK }
+  );
+  assert.deepEqual(
+    resolveInkColor({ ...DEFAULT_SETTINGS, mode: "white" }),
+    { useSourceColor: false, dotColor: DOT_WHITE }
+  );
 });
 
 test("el radio de cada forma conserva el área relativa de cobertura", () => {

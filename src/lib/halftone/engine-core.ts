@@ -10,6 +10,7 @@ import {
   type GarmentBg,
   cellSizePx,
   previewDpi,
+  resolveInkColor,
 } from "@/lib/halftone/types";
 import type { HalftoneRenderer } from "@/lib/halftone/renderer";
 
@@ -18,11 +19,6 @@ const BG_COLORS: Record<GarmentBg, [number, number, number, number]> = {
   black: [0.043, 0.051, 0.071, 1],
   white: [0.949, 0.957, 0.973, 1],
 };
-
-// Tinta blanca DTF. Sobre fondo blanco se simula película en gris medio
-// para que la cobertura siga siendo legible en la vista de prueba.
-const DOT_WHITE: [number, number, number] = [0.949, 0.957, 0.973];
-const DOT_FILM: [number, number, number] = [0.62, 0.66, 0.71];
 
 const SHAPE_INT = { round: 0, ellipse: 1, diamond: 2, line: 3 } as const;
 
@@ -58,6 +54,7 @@ export type EngineUniforms = {
   uBgColor: WebGLUniformLocation;
   uBgAlpha: WebGLUniformLocation;
   uDotColor: WebGLUniformLocation;
+  uSourceColor: WebGLUniformLocation;
 };
 
 export type RenderOptions = {
@@ -128,6 +125,7 @@ export class HalftoneEngineCore implements HalftoneRenderer {
       uBgColor: loc("uBgColor"),
       uBgAlpha: loc("uBgAlpha"),
       uDotColor: loc("uDotColor"),
+      uSourceColor: loc("uSourceColor"),
     };
 
     gl.activeTexture(gl.TEXTURE0);
@@ -189,7 +187,7 @@ export class HalftoneEngineCore implements HalftoneRenderer {
   const cell = cellSizePx(settings.lpi, dpi);
   const angle = (settings.angle * Math.PI) / 180;
   const bg = BG_COLORS[settings.bg];
-  const dot = settings.bg === "white" ? DOT_FILM : DOT_WHITE;
+  const { useSourceColor, dotColor: dot } = resolveInkColor(settings);
   const hardEdge = settings.mode === "white" || (opts.forceHardEdge ?? false);
 
   gl.uniform2f(u.uResolution, outputWidthPx, outputHeightPx);
@@ -205,6 +203,7 @@ export class HalftoneEngineCore implements HalftoneRenderer {
   gl.uniform3f(u.uBgColor, bg[0], bg[1], bg[2]);
   gl.uniform1f(u.uBgAlpha, bg[3]);
   gl.uniform3f(u.uDotColor, dot[0], dot[1], dot[2]);
+  gl.uniform1i(u.uSourceColor, useSourceColor ? 1 : 0);
 
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.flush();

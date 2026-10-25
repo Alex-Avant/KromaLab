@@ -54,6 +54,24 @@ test("una fórmula propia que guarda el fondo sí lo aplica", () => {
   assert.equal(settings.bg, "white");
 });
 
+test("aplicar una fórmula conserva el modo de color del usuario", () => {
+  useEditorStore.getState().resetSettings();
+  useEditorStore.getState().setSettings({ colorMode: "grayscale" });
+  useEditorStore.getState().applyPreset(BUILTIN_PRESETS[0]);
+  assert.equal(useEditorStore.getState().settings.colorMode, "grayscale");
+});
+
+test("una fórmula propia con colorMode explícito lo aplica", () => {
+  const custom: Preset = {
+    id: "custom-color",
+    name: "Custom color",
+    settings: { ...DEFAULT_SETTINGS, colorMode: "color" },
+  };
+  useEditorStore.getState().setSettings({ colorMode: "grayscale" });
+  useEditorStore.getState().applyPreset(custom);
+  assert.equal(useEditorStore.getState().settings.colorMode, "color");
+});
+
 test("restablecer devuelve todos los valores documentados", () => {
   const store = useEditorStore.getState();
   store.setSettings({

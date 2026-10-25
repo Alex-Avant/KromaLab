@@ -26,6 +26,7 @@ struct Uniforms {
   shape       : u32,         // 0=round 1=ellipse 2=diamond 3=line
   hardEdge    : u32,         // salida 1-bit (canal de tinta separada)
   bgAlpha     : f32,         // 1 = fondo opaco, 0 = transparente
+  useSourceColor : u32,      // 1 = el punto conserva el color original
 };
 
 @group(0) @binding(0) var img : texture_2d<f32>;
@@ -50,6 +51,8 @@ fn halftone(@builtin(global_invocation_id) gid: vec3<u32>) {
   let uv = clamp(px / u.resolution, vec2<f32>(0.0), vec2<f32>(1.0));
   let src = textureSampleLevel(img, samp, uv, 0.0).rgb;
   let lum = luma(src);
+  // Color del punto: original (modo color) o tinta uniforme (grises/DTF).
+  let inkColor = select(u.dotColor, src, u.useSourceColor != 0u);
   let inside = gid.x < u32(u.resolution.x) && gid.y < u32(u.resolution.y);
 
   // 2) Curva de tinta: gamma → contraste → rango.
@@ -107,9 +110,9 @@ fn halftone(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (u.hardEdge != 0u) { a = select(0.0, 1.0, a >= 0.5); }
   }
 
-  var outColor = vec4<f32>(u.dotColor, a);
+  var outColor = vec4<f32>(inkColor, a);
   if (u.bgAlpha > 0.5) {
-    outColor = vec4<f32>(mix(u.bgColor, u.dotColor, a), 1.0);
+    outColor = vec4<f32>(mix(u.bgColor, inkColor, a), 1.0);
   }
   if (inside) {
     textureStore(output, gid.xy, outColor);

@@ -84,6 +84,12 @@ test("la exportación fuerza fondo transparente sin tocar el resto", () => {
     settings,
     "el resto de parámetros se conserva"
   );
+  assert.equal(result.colorMode, "color");
+  const gray = transparentExportSettings({
+    ...DEFAULT_SETTINGS,
+    colorMode: "grayscale",
+  });
+  assert.equal(gray.colorMode, "grayscale");
 });
 
 test("el empaquetado 1-bit marca tinta donde el alfa es visible", () => {

@@ -19,6 +19,7 @@ import { HALFTONE_COMPUTE_WGSL, PRESENT_FRAGMENT_WGSL, PRESENT_VERTEX_WGSL } fro
 import {
   cellSizePx,
   previewDpi,
+  resolveInkColor,
   type HalftoneSettings,
 } from "@/lib/halftone/types";
 import type { RenderOptions } from "@/lib/halftone/engine-core";
@@ -32,8 +33,6 @@ const BG_COLORS: Record<string, [number, number, number, number]> = {
   black: [0.043, 0.051, 0.071, 1],
   white: [0.949, 0.957, 0.973, 1],
 };
-const DOT_WHITE: [number, number, number] = [0.949, 0.957, 0.973];
-const DOT_FILM: [number, number, number] = [0.62, 0.66, 0.71];
 const SHAPE_INT = { round: 0, ellipse: 1, diamond: 2, line: 3 } as const;
 
 /** Layout de bytes del struct Uniforms de wgsl.ts (alineado a WGSL). */
@@ -52,6 +51,7 @@ const OFFSETS = {
   shape: 68,
   hardEdge: 72,
   bgAlpha: 76,
+  sourceColor: 80,
 } as const;
 
 type RendererParts = {
@@ -259,7 +259,7 @@ export class WebGPURenderer implements HalftoneRenderer {
     const cell = cellSizePx(settings.lpi, dpi);
     const angle = (settings.angle * Math.PI) / 180;
     const bg = BG_COLORS[settings.bg];
-    const dot = settings.bg === "white" ? DOT_FILM : DOT_WHITE;
+    const { useSourceColor, dotColor: dot } = resolveInkColor(settings);
     const hardEdge = settings.mode === "white" || (opts.forceHardEdge ?? false);
 
     // Uniformes con el layout de wgsl.ts (Float32Array + vistas u32).
@@ -277,6 +277,7 @@ export class WebGPURenderer implements HalftoneRenderer {
     uints[OFFSETS.invert / 4] = settings.invert ? 1 : 0;
     uints[OFFSETS.shape / 4] = SHAPE_INT[settings.shape];
     uints[OFFSETS.hardEdge / 4] = hardEdge ? 1 : 0;
+    uints[OFFSETS.sourceColor / 4] = useSourceColor ? 1 : 0;
     floats[OFFSETS.bgAlpha / 4] = bg[3];
     device.queue.writeBuffer(this.uniformBuffer, 0, floats.buffer);
 

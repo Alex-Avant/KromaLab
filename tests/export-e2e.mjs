@@ -129,6 +129,29 @@ async function exportInFreshPage(browser, source, { format, scale }) {
         { needle, exact }
       );
 
+    const colorModeState = () =>
+      page.evaluate(() => {
+        const find = (text) =>
+          [...document.querySelectorAll("button")].find((candidate) =>
+            candidate.textContent.includes(text)
+          );
+        return {
+          color: find("Color original")?.getAttribute("aria-pressed"),
+          gray: find("Escala de grises")?.getAttribute("aria-pressed"),
+        };
+      });
+
+    // El color original es el modo por defecto; grises es opcional.
+    let colorMode = await colorModeState();
+    assert.equal(colorMode.color, "true", "color original por defecto");
+    assert.equal(colorMode.gray, "false");
+    await clickButton("Escala de grises");
+    colorMode = await colorModeState();
+    assert.equal(colorMode.gray, "true", "el selector cambia a grises");
+    await clickButton("Color original");
+    colorMode = await colorModeState();
+    assert.equal(colorMode.color, "true", "vuelve a color original");
+
     // Configuración vigente distinta del default (22 LPI, 15°).
     await clickButton("Vintage");
 

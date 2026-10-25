@@ -40,6 +40,7 @@ uniform bool      uHardEdge;   // salida 1-bit (canal de tinta separada)
 uniform vec3      uBgColor;    // color de fondo de la vista de prueba
 uniform float     uBgAlpha;    // 1 = fondo opaco, 0 = transparente
 uniform vec3      uDotColor;   // color de la tinta (blanco DTF)
+uniform bool      uSourceColor; // true = el punto conserva el color original
 
 out vec4 fragColor;
 
@@ -55,6 +56,8 @@ void main() {
   // 1) Muestra de la imagen original.
   vec3 src = texture(uImage, px / uResolution).rgb;
   float lum = luma(src);
+  // Color del punto: original (modo color) o tinta uniforme (grises/DTF).
+  vec3 inkColor = uSourceColor ? src : uDotColor;
 
   // 2) Curva de tinta.
   float ink = pow(clamp(lum, 0.0, 1.0), uGamma);
@@ -83,9 +86,9 @@ void main() {
     float band = abs(f.y);
     float a = 1.0 - smoothstep(hh - edge, hh + edge, band);
     if (uHardEdge) a = (band <= hh) ? 1.0 : 0.0;
-    fragColor = vec4(uDotColor, a);
+    fragColor = vec4(inkColor, a);
     if (uBgAlpha > 0.5) {
-      fragColor.rgb = mix(uBgColor, uDotColor, a);
+      fragColor.rgb = mix(uBgColor, inkColor, a);
       fragColor.a = 1.0;
     }
     return;
@@ -116,9 +119,9 @@ void main() {
   // Tinta blanca separada: umbral 50% sobre la trama continua (1-bit).
   if (uHardEdge) a = (a >= 0.5) ? 1.0 : 0.0;
 
-  fragColor = vec4(uDotColor, a);
+  fragColor = vec4(inkColor, a);
   if (uBgAlpha > 0.5) {
-    fragColor.rgb = mix(uBgColor, uDotColor, a);
+    fragColor.rgb = mix(uBgColor, inkColor, a);
     fragColor.a = 1.0;
   }
 }

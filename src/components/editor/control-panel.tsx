@@ -8,6 +8,7 @@ import { ShapeControl } from "@/components/editor/controls/shape-control";
 import { CurvesControl } from "@/components/editor/controls/curves-control";
 import { ModeControl } from "@/components/editor/controls/mode-control";
 import { BackgroundControl } from "@/components/editor/controls/background-control";
+import { ColorModeControl } from "@/components/editor/controls/color-mode-control";
 import { PresetStrip } from "@/components/editor/preset-strip";
 
 type Level = "basic" | "advanced";
@@ -66,6 +67,7 @@ export function ControlPanel() {
 
       <LpiControl />
       <ShapeControl />
+      <ColorModeControl />
       <CurvesControl variant={level} />
 
       {level === "advanced" && (
@@ -75,11 +77,6 @@ export function ControlPanel() {
           <BackgroundControl />
         </>
       )}
-
-      <p className="px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">
-        La exportación es una película transparente: el fondo de prueba no se
-        incluye en el archivo.
-      </p>
     </div>
   );
 }

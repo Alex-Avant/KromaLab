@@ -20,6 +20,9 @@ export const DOT_RADIUS_SCALE: Record<DotShape, number> = {
 
 export type InkMode = "luminance" | "white";
 
+/** Procesamiento tonal: color original o escala de grises. */
+export type ColorMode = "color" | "grayscale";
+
 export type GarmentBg = "transparent" | "black" | "white";
 
 export type HalftoneSettings = {
@@ -39,6 +42,8 @@ export type HalftoneSettings = {
   invert: boolean;
   /** Luminancia (trama DTF estándar) o canal de tinta blanca separada. */
   mode: InkMode;
+  /** Color original o escala de grises para la trama. */
+  colorMode: ColorMode;
   /** Fondo de la vista de prueba. */
   bg: GarmentBg;
 };
@@ -91,6 +96,7 @@ export const DEFAULT_SETTINGS: HalftoneSettings = {
   minThreshold: 0,
   invert: false,
   mode: "luminance",
+  colorMode: "color",
   bg: "transparent",
 };
 
@@ -189,6 +195,34 @@ export const MODE_LABELS: Record<InkMode, string> = {
   luminance: "Luminancia",
   white: "Tinta blanca",
 };
+
+export const COLOR_MODE_LABELS: Record<ColorMode, string> = {
+  color: "Color original",
+  grayscale: "Escala de grises",
+};
+
+/** Tinta blanca DTF y tinta oscura para la trama en escala de grises. */
+export const DOT_WHITE: [number, number, number] = [0.949, 0.957, 0.973];
+export const DOT_BLACK: [number, number, number] = [0.08, 0.08, 0.08];
+
+/**
+ * Decide el color del punto para un ajuste dado:
+ *  - Color original: el shader usa el color muestreado de la imagen.
+ *  - Escala de grises: tinta oscura uniforme.
+ *  - Tinta blanca: canal DTF blanco (siempre uniforme).
+ */
+export function resolveInkColor(settings: HalftoneSettings): {
+  useSourceColor: boolean;
+  dotColor: [number, number, number];
+} {
+  if (settings.mode === "white") {
+    return { useSourceColor: false, dotColor: DOT_WHITE };
+  }
+  if (settings.colorMode === "color") {
+    return { useSourceColor: true, dotColor: DOT_WHITE };
+  }
+  return { useSourceColor: false, dotColor: DOT_BLACK };
+}
 
 export const BG_LABELS: Record<GarmentBg, string> = {
   transparent: "Transparente",

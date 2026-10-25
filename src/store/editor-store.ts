@@ -89,13 +89,14 @@ export const useEditorStore = create<EditorState>((set) => ({
   applyPreset: (preset) =>
     set((s) => {
       const resolved = resolvePresetSettings(preset.settings);
-      // El fondo de prueba es una preferencia de vista: solo se aplica
-      // si la fórmula lo guardó explícitamente (fórmulas propias).
+      // Fondo y modo de color son preferencias del usuario: solo se
+      // aplican si la fórmula los guardó explícitamente.
       return {
-        settings:
-          preset.settings.bg !== undefined
-            ? resolved
-            : { ...resolved, bg: s.settings.bg },
+        settings: {
+          ...resolved,
+          bg: preset.settings.bg ?? s.settings.bg,
+          colorMode: preset.settings.colorMode ?? s.settings.colorMode,
+        },
       };
     }),
   resetSettings: () => set({ settings: DEFAULT_SETTINGS }),

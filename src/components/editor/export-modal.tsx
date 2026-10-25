@@ -202,12 +202,6 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
                 {widthCm.toFixed(1)} × {heightCm.toFixed(1)} CM
               </span>
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              El archivo contiene los puntos de tinta sobre transparencia, no
-              la foto original como fondo. La imagen se representa mediante el
-              tamaño y la densidad de esos puntos. El fondo de prueba solo se
-              aplica al preview.
-            </p>
           </div>
 
           {tooLarge && (
@@ -261,10 +255,6 @@ export function ExportModal({ runner }: { runner: ExportRunner }) {
               </dl>
             </details>
           )}
-
-          <p className="tech-value text-center text-[10px] tracking-[0.12em] text-muted-foreground">
-            EXPORTACIONES LOCALES SIN LÍMITE DIARIO
-          </p>
 
           <Button
             onClick={() => void doExport()}
